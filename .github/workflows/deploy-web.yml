@@ -21,7 +21,7 @@ jobs:
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
         with:
-          version: latest
+          version: 5.0.7
           cache-key: emsdk-cache-${{ runner.os }}
 
       - name: Install CMake
@@ -37,7 +37,7 @@ jobs:
       - name: Prepare deployment folder
         run: |
           mkdir -p _site
-          cp -r build-web/* _site/
+          cp -r build/build-web/* _site/
 
       - name: Upload Github Pages artifact
         uses: actions/upload-pages-artifact@v3
