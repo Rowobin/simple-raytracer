@@ -33,7 +33,7 @@ jobs:
           cd build-web
           emcmake cmake  -B . -S .. \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_EXE_LINKER_FLAGS="-sUSE_SDL=3"
+            -DCMAKE_EXE_LINKER_FLAGS="-sUSE_SDL=3" \
             --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/shell.html
           cmake --build . --config Release
 
