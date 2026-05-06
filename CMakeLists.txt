@@ -15,11 +15,6 @@ add_compile_options(
   $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
 
-if(EMSCRIPTEN)
-  add_compile_options(-sUSE_SDL=3)
-  add_link_options(-sUSE_SDL=3)
-endif()
-
 # Used to fetch external dependencies from github if necessary
 include(FetchContent)
 
@@ -42,7 +37,7 @@ if(NOT EMSCRIPTEN)
     FetchContent_MakeAvailable(SDL3)
   else()
     message(STATUS "SDL3 found on system.")
-  endif()  
+  endif()
 endif()
 
 # ImGui
@@ -70,7 +65,18 @@ target_include_directories(imgui_lib
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
 )
-if(NOT EMSCRIPTEN)
+
+if(EMSCRIPTEN)
+  execute_process(
+    COMMAND ${CMAKE_C_COMPILER} -sUSE_SDL=3 --show-ports
+    OUTPUT_QUIET ERROR_QUIET
+  )
+  target_compile_options(imgui_lib PUBLIC -sUSE_SDL=3)
+  target_include_directories(imgui_lib
+    PUBLIC
+      $ENV{EMSDK}/upstream/emscripten/cache/sysroot/include
+  )
+else()
   target_link_libraries(imgui_lib
     PUBLIC
       SDL3::SDL3-static
@@ -85,12 +91,13 @@ if(EMSCRIPTEN)
   # Emscripten-specific settings
   target_link_options(simple_raytracer
     PRIVATE
+      -sUSE_SDL=3
       -sALLOW_MEMORY_GROWTH=1
       -sINITIAL_MEMORY=32MB
       --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/shell.html
   )
 
-  set_target_properties(simple_raytracer 
+  set_target_properties(simple_raytracer
     PROPERTIES
       SUFFIX ".html"
       OUTPUT_NAME "simple_raytracer"
@@ -100,7 +107,7 @@ if(EMSCRIPTEN)
     PRIVATE
       imgui_lib
   )
-else()  
+else()
   target_link_libraries(simple_raytracer
     PRIVATE
       SDL3::SDL3-static
