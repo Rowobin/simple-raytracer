@@ -3,7 +3,7 @@
 
 # simple-raytracer
 
-An open-source raytracing engine built with SDL3 GPU.
+An open-source raytracing engine built with SDL3 GPU. Check out the [web version](https://rowobin.github.io/simple-raytracer/)!
 
 ## Why
 
@@ -80,6 +80,8 @@ emrun build-web/index.html
 If you want to build your own raytracing engine, I wrote X chapters explaining how I created this one:
 
 ## Contributing
+
+If you find any mistakes or think of any improvements to this repository, feel free to send a PR!
 
 ## License
 
