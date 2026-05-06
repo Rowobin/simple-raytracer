@@ -37,7 +37,7 @@ if(NOT EMSCRIPTEN)
     FetchContent_MakeAvailable(SDL3)
   else()
     message(STATUS "SDL3 found on system.")
-  endif()
+  endif()  
 endif()
 
 # ImGui
@@ -65,17 +65,15 @@ target_include_directories(imgui_lib
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
 )
-
 if(EMSCRIPTEN)
-  execute_process(
-    COMMAND ${CMAKE_C_COMPILER} -sUSE_SDL=3 --show-ports
-    OUTPUT_QUIET ERROR_QUIET
-  )
-  target_compile_options(imgui_lib PUBLIC -sUSE_SDL=3)
-  target_include_directories(imgui_lib
-    PUBLIC
-      $ENV{EMSDK}/upstream/emscripten/cache/sysroot/include
-  )
+    target_include_directories(imgui_lib
+      PUBLIC
+        ${EMSCRIPTEN_SYSROOT}/include
+    )
+    target_link_options(imgui_lib
+      PUBLIC
+        -sUSE_SDL=3
+    )
 else()
   target_link_libraries(imgui_lib
     PUBLIC
@@ -97,7 +95,7 @@ if(EMSCRIPTEN)
       --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/shell.html
   )
 
-  set_target_properties(simple_raytracer
+  set_target_properties(simple_raytracer 
     PROPERTIES
       SUFFIX ".html"
       OUTPUT_NAME "simple_raytracer"
@@ -107,7 +105,7 @@ if(EMSCRIPTEN)
     PRIVATE
       imgui_lib
   )
-else()
+else()  
   target_link_libraries(simple_raytracer
     PRIVATE
       SDL3::SDL3-static
