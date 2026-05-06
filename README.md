@@ -72,7 +72,7 @@ mkdir build
 cd build
 emcmake cmake -B build-web -S ..
 cmake --build build-web
-emrun build-web/simple-raytracer.html
+emrun build-web/index.html
 ```
 
 ## Chapters

@@ -94,7 +94,7 @@ if(EMSCRIPTEN)
   set_target_properties(simple_raytracer 
     PROPERTIES
       SUFFIX ".html"
-      OUTPUT_NAME "simple_raytracer"
+      OUTPUT_NAME "index"
   )
 
   target_link_libraries(simple_raytracer
