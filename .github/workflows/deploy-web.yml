@@ -21,7 +21,7 @@ jobs:
       - name: Setup Emscripten
         uses: emscripten-core/setup-emsdk@v15
         with:
-          version: 3.1.68
+          version: latest
           cache-key: emsdk-cache-${{ runner.os }}
 
       - name: Install CMake

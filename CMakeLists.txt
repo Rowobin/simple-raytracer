@@ -66,11 +66,7 @@ target_include_directories(imgui_lib
     ${imgui_SOURCE_DIR}/backends
 )
 if(EMSCRIPTEN)
-    target_include_directories(imgui_lib
-      PUBLIC
-        ${EMSCRIPTEN_SYSROOT}/include
-    )
-    target_link_options(imgui_lib
+    target_compile_options(imgui_lib
       PUBLIC
         -sUSE_SDL=3
     )
