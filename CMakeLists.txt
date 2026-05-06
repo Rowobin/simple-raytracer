@@ -15,6 +15,11 @@ add_compile_options(
   $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
 
+if(EMSCRIPTEN)
+  add_compile_options(-sUSE_SDL=3)
+  add_link_options(-sUSE_SDL=3)
+endif()
+
 # Used to fetch external dependencies from github if necessary
 include(FetchContent)
 
@@ -65,12 +70,7 @@ target_include_directories(imgui_lib
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
 )
-if(EMSCRIPTEN)
-    target_compile_options(imgui_lib
-      PUBLIC
-        -sUSE_SDL=3
-    )
-else()
+if(NOT EMSCRIPTEN)
   target_link_libraries(imgui_lib
     PUBLIC
       SDL3::SDL3-static
@@ -85,7 +85,6 @@ if(EMSCRIPTEN)
   # Emscripten-specific settings
   target_link_options(simple_raytracer
     PRIVATE
-      -sUSE_SDL=3
       -sALLOW_MEMORY_GROWTH=1
       -sINITIAL_MEMORY=32MB
       --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/shell.html

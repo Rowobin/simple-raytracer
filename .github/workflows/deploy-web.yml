@@ -31,7 +31,7 @@ jobs:
         run: |
           mkdir build
           cd build
-          emcmake cmake  -B build-web -S ..
+          emcmake cmake -B build-web -S ..
           cmake --build build-web
 
       - name: Prepare deployment folder
