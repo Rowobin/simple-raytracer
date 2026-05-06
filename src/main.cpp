@@ -1,12 +1,23 @@
 #include <iostream>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+  #include <emscripten.h>
+  #include <emscripten/html5.h>
+#endif
+
+#define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
+
+SDL_Window* window;
+SDL_Renderer* renderer;
+SDL_Texture* texture;
+Uint8 blueValue;
 
 void RebuildTextureBlue(SDL_Texture* texture, Uint8 blue){
   std::vector<Uint32> pixels(texture->w * texture->h);
@@ -22,118 +33,133 @@ void RebuildTextureBlue(SDL_Texture* texture, Uint8 blue){
   SDL_UpdateTexture(texture, nullptr, pixels.data(), texture->w * sizeof(Uint32));
 }
 
-int main(int agrc, char* argv[]) {
-  // Init SDL
-  if(!SDL_Init(SDL_INIT_VIDEO)) {
-    std::cerr << "SDL_Init Error: " << SDL_GetError() << std::endl;
-    return 1;
-  }
-
-  // Create window
-  SDL_Window* window = SDL_CreateWindow(
-    "Simple Raytracer - SDL3 - C++20",
+SDL_AppResult SDL_AppInit(void** appstate, int argc, char**argv){
+  window = SDL_CreateWindow(
+    "Simple Raytracer - C++20 - SDL3",
     800,
     800,
     SDL_WINDOW_RESIZABLE
   );
+
   if(!window){
     std::cerr << "SDL_CreateWindow Error: " << SDL_GetError() << std::endl;
-    SDL_Quit();
-    return 1;
+    return SDL_APP_FAILURE;
   }
 
-  // Create renderer
-  SDL_Renderer* renderer = SDL_CreateRenderer(window, nullptr);
+  SDL_SetWindowSize(window, 800, 800);
+  SDL_SetWindowResizable(window, true);
+
+  renderer = SDL_CreateRenderer(
+    window,
+    nullptr
+  );
+
   if(!renderer){
     std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
+    return SDL_APP_FAILURE;
   }
 
-  // Create a texture we can write to (streaming = CPU writable)
-  SDL_Texture* texture = SDL_CreateTexture(
+  texture = SDL_CreateTexture(
     renderer,
     SDL_PIXELFORMAT_RGBA8888,
     SDL_TEXTUREACCESS_STREAMING,
     32,
-    32 
-  );
+    32
+  ); 
+
   if(!texture){
     std::cerr << "SDL_CreateTexture Error: " << SDL_GetError() << std::endl;
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
+    return SDL_APP_FAILURE;
   }
+
   SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST);
-  Uint8 blueValue = 0;
+  blueValue = 0;
   RebuildTextureBlue(texture, blueValue);
 
-  // ImGui init
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGui::StyleColorsDark();
   ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
   ImGui_ImplSDLRenderer3_Init(renderer);
 
-  std::cout << "Press ESC or close the window to quit!\n";
+  return SDL_APP_CONTINUE;
+}
 
-  bool running = true;
-  SDL_Event event;
+SDL_AppResult SDL_AppIterate(void* appstate){
+  //ImGui frame
+  ImGui_ImplSDLRenderer3_NewFrame();
+  ImGui_ImplSDL3_NewFrame();
+  ImGui::NewFrame();
 
-  while(running){
-    // Event handling
-    if(SDL_PollEvent(&event)){
-      ImGui_ImplSDL3_ProcessEvent(&event);
+  ImGui::SetNextWindowSize(ImVec2(256, 256), ImGuiCond_FirstUseEver);
+  ImGui::Begin("Texture Controls");
+  ImGui::Text("Blue channel:");
 
-      if(event.type == SDL_EVENT_QUIT){
-        running = false;  
-      }
-      if(event.type == SDL_EVENT_KEY_DOWN){
-        if(event.key.key == SDLK_ESCAPE){
-          running = false;
-        }
-      }
-    }
+  int blue = blueValue;
+  ImVec4 swatch(0.0f, 0.0f, blue/255.0f, 1.0f);
+  ImGui::ColorButton(
+    "##preview",
+    swatch,
+    ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder,
+    ImVec2(24, 24)
+  );
 
-    // ImGui frame
-    ImGui_ImplSDLRenderer3_NewFrame();
-    ImGui_ImplSDL3_NewFrame();
-    ImGui::NewFrame();
+  ImGui::SameLine();
 
-    ImGui::SetNextWindowSize(ImVec2(256, 256), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Texture Controls");
-    ImGui::Text("Blue channel:");
-
-    int blue = blueValue;
-
-    ImVec4 swatch(0.0f, 0.0f, blue / 255.0f, 1.0f);
-    ImGui::ColorButton(
-        "##preview",
-        swatch,
-        ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoBorder,
-        ImVec2(24, 24)
-    );
-
-    ImGui::SameLine();
-
-    if(ImGui::SliderInt("Blue", &blue, 0, 255)){
-      blueValue = static_cast<Uint8>(blue);
-      RebuildTextureBlue(texture, blueValue);
-    }
-
-    ImGui::End();
-    ImGui::Render();
-
-    // Render
-    SDL_RenderClear(renderer);
-    SDL_RenderTexture(renderer, texture, nullptr, nullptr);
-    ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
-    SDL_RenderPresent(renderer);
+  if(ImGui::SliderInt("Blue", &blue, 0, 255)){
+    blueValue = static_cast<Uint8>(blue);
+    RebuildTextureBlue(texture, blueValue);
   }
 
-  // Clean up before closing 
+  ImGui::End();
+  ImGui::Render();
+
+  int window_w, window_h;
+  SDL_GetWindowSize(window, &window_w, &window_h);
+  float win_ratio = window_w / static_cast<float>(window_h);
+  
+  float tex_ratio = texture->w / static_cast<float>(texture->h);
+  SDL_FRect dstrect;
+
+  if(win_ratio >= tex_ratio){ 
+    dstrect.h = window_h;
+    dstrect.w = dstrect.h * tex_ratio;
+    dstrect.x = (window_w - dstrect.w) / 2.0f;
+    dstrect.y = 0.0f;
+  } else {
+    dstrect.w = window_w;
+    dstrect.h = dstrect.w / tex_ratio;
+    dstrect.x = 0.0f;
+    dstrect.y = (window_h - dstrect.h) / 2.0f;
+  }
+  
+  SDL_RenderClear(renderer);
+  SDL_RenderTexture(renderer, texture, nullptr, &dstrect);
+  ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+  SDL_RenderPresent(renderer);
+
+  return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event){
+  ImGui_ImplSDL3_ProcessEvent(event);
+
+  if(event->type == SDL_EVENT_QUIT){
+    return SDL_APP_SUCCESS;
+  } 
+
+#ifndef __EMSCRIPTEN__
+  if(event->type == SDL_EVENT_KEY_DOWN){
+    if(event->key.key == SDLK_ESCAPE){
+      return SDL_APP_SUCCESS;
+    }
+  }
+#endif
+
+  return SDL_APP_CONTINUE;
+}
+
+void SDL_AppQuit(void* appstate, SDL_AppResult result){
   ImGui_ImplSDLRenderer3_Shutdown();
   ImGui_ImplSDL3_Shutdown();
   ImGui::DestroyContext();
@@ -141,9 +167,4 @@ int main(int agrc, char* argv[]) {
   SDL_DestroyTexture(texture);
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
-  SDL_Quit();
-
-  std::cout << "Window closed. Goodbye!\n";
-
-  return 0;
 }

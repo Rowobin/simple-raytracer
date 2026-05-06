@@ -1,21 +1,3 @@
-# Building and running simple-raytracer
-
-# On Windows
-
-# mkdir build
-# cd build
-# cmake -DCMAKE_BUILD_TYPE=Release ..
-# cmake --build . --config Release
-# .\Release\simple_raytracer.exe
-
-# On MacOS/Linux
-
-# mkdir build
-# cd build
-# cmake -DCMAKE_BUILD_TYPE=Release ..
-# cmake --build . --config Release
-# ./simple_raytracer
-
 cmake_minimum_required(VERSION 3.10)
 
 project(SimpleRaytracer VERSION 1.0 LANGUAGES CXX)
@@ -25,7 +7,7 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Turn on compiler warnings
+# Turn on all compiler warnings
 add_compile_options(
   $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall>
   $<$<CXX_COMPILER_ID:GNU,Clang>:-Wextra>
@@ -33,23 +15,33 @@ add_compile_options(
   $<$<CXX_COMPILER_ID:MSVC>:/W4>
 )
 
-# Include external libraries via FetchContent
+# Used to fetch external dependencies from github if necessary
 include(FetchContent)
 
 # SDL3
-FetchContent_Declare(
-  SDL3
-  GIT_REPOSITORY  https://github.com/libsdl-org/SDL.git
-  GIT_TAG         release-3.4.8
-  GIT_SHALLOW     TRUE
-)
-# Do not build SDL3 as a dynamic/shared library (SDL3.dll)
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-# Build SDL3 as a static library (SDL3-static.lib)
-set(SDL_STATIC ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(SDL3)
+if(NOT EMSCRIPTEN)
+  find_package(SDL3)
+  if(NOT SDL3_FOUND)
+    message(STATUS "SDL3 not found on system. Fetching from github...")
+
+    FetchContent_Declare(
+      SDL3
+      GIT_REPOSITORY  https://github.com/libsdl-org/SDL.git
+      GIT_TAG         release-3.4.8
+      GIT_SHALLOW     TRUE
+    )
+    # Do not build SDL3 as a dynamic/shared library (SDL3.dll)
+    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+    # Build SDL3 as a static library (SDL3-static.lib)
+    set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(SDL3)
+  else()
+    message(STATUS "SDL3 found on system.")
+  endif()  
+endif()
 
 # ImGui
+message(STATUS "Fetching ImGui from github...")
 FetchContent_Declare(
   imgui
   GIT_REPOSITORY https://github.com/ocornut/imgui.git
@@ -73,22 +65,50 @@ target_include_directories(imgui_lib
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
 )
-target_link_libraries(imgui_lib
-  PUBLIC
-    SDL3::SDL3-static
-)
+if(EMSCRIPTEN)
+    target_compile_options(imgui_lib
+      PUBLIC
+        -sUSE_SDL=3
+    )
+else()
+  target_link_libraries(imgui_lib
+    PUBLIC
+      SDL3::SDL3-static
+  )
+endif()
 
 add_executable(simple_raytracer
   src/main.cpp
 )
 
-target_link_libraries(simple_raytracer
-  PRIVATE
-    SDL3::SDL3-static
-    imgui_lib
-)
+if(EMSCRIPTEN)
+  # Emscripten-specific settings
+  target_link_options(simple_raytracer
+    PRIVATE
+      -sUSE_SDL=3
+      -sALLOW_MEMORY_GROWTH=1
+      -sINITIAL_MEMORY=32MB
+      --shell-file ${CMAKE_CURRENT_SOURCE_DIR}/shell.html
+  )
 
-# Name build output
-set_target_properties(simple_raytracer PROPERTIES
-  OUTPUT_NAME "simple_raytracer"
-)
+  set_target_properties(simple_raytracer 
+    PROPERTIES
+      SUFFIX ".html"
+      OUTPUT_NAME "simple_raytracer"
+  )
+
+  target_link_libraries(simple_raytracer
+    PRIVATE
+      imgui_lib
+  )
+else()  
+  target_link_libraries(simple_raytracer
+    PRIVATE
+      SDL3::SDL3-static
+      imgui_lib
+  )
+
+  set_target_properties(simple_raytracer PROPERTIES
+    OUTPUT_NAME "simple_raytracer"
+  )
+endif()
