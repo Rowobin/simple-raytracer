@@ -1,11 +1,6 @@
 #include <iostream>
 #include <vector>
 
-#ifdef __EMSCRIPTEN__
-  #include <emscripten.h>
-  #include <emscripten/html5.h>
-#endif
-
 #define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
