@@ -3,7 +3,7 @@
 
 # simple-raytracer
 
-An open-source raytracing engine built with SDL3 GPU. Check out the [web version](https://rowobin.github.io/simple-raytracer/)!
+An open-source raytracing engine built with SDL3 GPU.
 
 ## Why
 
@@ -35,11 +35,8 @@ for cross-platform graphics applications:
 
 ## How to build
 
-### Native
-
-Building simple-raytracer as a native program is extremely simple. All the dependencies 
-are fetched from Github by CMake. As long as you have CMake and a C compiler installed on your machine,
-you are good to go.
+To build simple-raytracer, you will need to have CMake and a C/C++ compiler installed.
+If those requirements are met, simple run these commands on your terminal:
 
 ```bash
 git clone https://github.com/Rowobin/simple-raytracer.git
@@ -49,30 +46,6 @@ cd build
 cmake -B build-native -S ..
 cmake --build build-native
 ./build-native/simple_raytracer.exe
-```
-
-### Emscripten/Webassembly
-
-Building simple-raytracer for the web requires setting up emscripten.
-
-```bash
-git clone https://github.com/emscripten-core/emsdk.git
-cd emsdk
-./emsdk install latest
-./emsdk activate latest
-source ./emsdk_env.sh
-```
-
-Once emscripten has been set up, the process is very similar to native.
-
-```bash
-git clone https://github.com/Rowobin/simple-raytracer.git
-cd simple-raytracer
-mkdir build
-cd build
-emcmake cmake -B build-web -S ..
-cmake --build build-web
-emrun build-web/index.html
 ```
 
 ## Chapters
