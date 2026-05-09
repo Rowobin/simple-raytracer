@@ -1,5 +1,5 @@
 > [!NOTE]  
-> This repository is still a WIP. Missing features are to be expected.
+ This repository is still a WIP. Missing features are to be expected.
 
 # simple-raytracer
 
@@ -36,7 +36,7 @@ for cross-platform graphics applications:
 ## How to build
 
 To build simple-raytracer, you will need to have CMake and a C/C++ compiler installed.
-If those requirements are met, simple run these commands on your terminal:
+If those requirements are met, run these commands on your terminal:
 
 ```bash
 git clone https://github.com/Rowobin/simple-raytracer.git
@@ -48,9 +48,24 @@ cmake --build build-native
 ./build-native/simple_raytracer.exe
 ```
 
+### Building shaders
+
+This program comes with pre-compiled SPIRV and MSL shaders. If you want to compile these shaders yourself, you will
+need to use a shader compiler. Personally, I just use glslc and spirv-cross, which can be installed using the Vulkan SDK.
+
+```bash
+glslc -fshader-stage=vertex vert.glsl -o vert.spv
+glslc -fshader-stage=fragment frag.glsl -o frag.spv
+
+spirv-cross vert.spv --msl --output vert.msl
+spirv-cross frag.spv --msl --output frag.msl
+```
+
 ## Chapters
 
-If you want to build your own raytracing engine, I wrote X chapters explaining how I created this one:
+Isimple f you want to build your own raytracing engine, I wrote X chapters explaining how I created this one:
+
+**[Chapter 1](#)** - Project set up
 
 ## Contributing
 

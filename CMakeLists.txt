@@ -63,21 +63,44 @@ target_include_directories(imgui_lib
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
 )
-target_link_libraries(imgui_lib
-  PUBLIC
+if(NOT SDL3_FOUND)
+  target_link_libraries(imgui_lib
+    PUBLIC
     SDL3::SDL3-static
-)
+  )
+else()
+  target_link_libraries(imgui_lib
+    PUBLIC
+    SDL3::SDL3
+  )
+endif()
 
 add_executable(simple_raytracer
   src/main.cpp
 )
 
-target_link_libraries(simple_raytracer
-  PRIVATE
-    SDL3::SDL3-static
-    imgui_lib
-)
+if(NOT SDL3_FOUND)
+  target_link_libraries(simple_raytracer
+    PRIVATE
+      SDL3::SDL3-static
+      imgui_lib
+  )
+else()
+  target_link_libraries(simple_raytracer
+    PRIVATE
+      SDL3::SDL3
+      imgui_lib
+  )
+endif()
 
 set_target_properties(simple_raytracer PROPERTIES
   OUTPUT_NAME "simple_raytracer"
+)
+
+# copy shaders into build folder
+add_custom_command(TARGET simple_raytracer
+  POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      ${CMAKE_SOURCE_DIR}/shaders
+      $<TARGET_FILE_DIR:simple_raytracer>/shaders
 )
