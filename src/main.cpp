@@ -61,9 +61,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
 
   size_t vertexCodeSize;
 #ifdef __APPLE__
-  void* vertexCode = SDL_LoadFile((basePath + "shaders/metal/vert.msl").c_str(), &vertexCodeSize);
+  void* vertexCode = SDL_LoadFile((basePath + "shaders/metal/vertex.metal").c_str(), &vertexCodeSize);
 #else
-  void* vertexCode = SDL_LoadFile((basePath + "shaders/spirv/vert.spv").c_str(), &vertexCodeSize);
+  void* vertexCode = SDL_LoadFile((basePath + "shaders/spirv/vertex.spv").c_str(), &vertexCodeSize);
 #endif
   if(!vertexCode){
     std::cout << "SDL_LoadFile ERROR - " << SDL_GetError() << std::endl;
@@ -72,11 +72,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
   SDL_GPUShaderCreateInfo vertexInfo{};
   vertexInfo.code = (Uint8*) vertexCode;
   vertexInfo.code_size = vertexCodeSize;
+  vertexInfo.entrypoint = "vertexMain";
 #ifdef __APPLE__
-  vertexInfo.entrypoint = "main0";
   vertexInfo.format = SDL_GPU_SHADERFORMAT_MSL;
 #else
-  vertexInfo.entrypoint = "main";
   vertexInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
 #endif
   vertexInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
@@ -92,9 +91,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
 
   size_t fragmentCodeSize;
 #ifdef __APPLE__
-  void* fragmentCode = SDL_LoadFile((basePath + "shaders/metal/frag.msl").c_str(), &fragmentCodeSize);
+  void* fragmentCode = SDL_LoadFile((basePath + "shaders/metal/fragment.metal").c_str(), &fragmentCodeSize);
 #else
-  void* fragmentCode = SDL_LoadFile((basePath + "shaders/spirv/frag.spv").c_str(), &fragmentCodeSize);
+  void* fragmentCode = SDL_LoadFile((basePath + "shaders/spirv/fragment.spv").c_str(), &fragmentCodeSize);
 #endif
   if(!fragmentCode){
     std::cout << "SDL_LoadFile ERROR - " << SDL_GetError() << std::endl;
@@ -103,11 +102,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
   SDL_GPUShaderCreateInfo fragmentInfo{};
   fragmentInfo.code = (Uint8*) fragmentCode;
   fragmentInfo.code_size = fragmentCodeSize;
+  fragmentInfo.entrypoint = "fragmentMain";
 #ifdef __APPLE__
-  fragmentInfo.entrypoint = "main0";
   fragmentInfo.format = SDL_GPU_SHADERFORMAT_MSL;
 #else
-  fragmentInfo.entrypoint = "main";
   fragmentInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
 #endif
   fragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
