@@ -56,7 +56,7 @@ add_library(imgui_lib STATIC
   ${imgui_SOURCE_DIR}/imgui_widgets.cpp
   # SDL3 + SDL_Renderer backends
   ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlrenderer3.cpp
+  ${imgui_SOURCE_DIR}/backends/imgui_impl_sdlgpu3.cpp
 )
 target_include_directories(imgui_lib
   PUBLIC

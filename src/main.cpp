@@ -7,7 +7,7 @@
 
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
-#include "imgui_impl_sdlrenderer3.h"
+#include "imgui_impl_sdlgpu3.h"
 
 struct Vertex{
   float x, y, z;
@@ -25,6 +25,8 @@ struct Context{
   SDL_GPUDevice* device;
   SDL_GPUBuffer* vertexBuffer;
   SDL_GPUGraphicsPipeline* graphicsPipelineStandard;
+  SDL_GPUGraphicsPipeline* graphicsPipelineWireframe;
+  bool useWireframe;
 };
 Context context;
 
@@ -83,7 +85,6 @@ SDL_GPUShader* loadShader(Context* context, const char* relPath, const char* ent
 }
   
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
-
   if(contextInit(&context) == -1){
     return SDL_APP_FAILURE;
   }
@@ -126,11 +127,19 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
     .vertex_input_state.num_vertex_attributes = 2,
     .vertex_input_state.vertex_attributes = vertexAttribute,
     .target_info.num_color_targets = 1,
-    .target_info.color_target_descriptions = colorTargetDescription
+    .target_info.color_target_descriptions = colorTargetDescription,
+    .rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL
   };
 
   context.graphicsPipelineStandard = SDL_CreateGPUGraphicsPipeline(context.device, &pipelineInfo);
   if(!context.graphicsPipelineStandard){
+    std::cout << "SDL_CreateGPUGraphicsPipeline ERROR - " << SDL_GetError() << std::endl;
+    return SDL_APP_FAILURE;
+  }
+
+  pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_LINE;
+  context.graphicsPipelineWireframe = SDL_CreateGPUGraphicsPipeline(context.device, &pipelineInfo);
+  if(!context.graphicsPipelineWireframe){
     std::cout << "SDL_CreateGPUGraphicsPipeline ERROR - " << SDL_GetError() << std::endl;
     return SDL_APP_FAILURE;
   }
@@ -192,10 +201,33 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
 
   SDL_ReleaseGPUTransferBuffer(context.device, transferBuffer);
 
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGui_ImplSDL3_InitForSDLGPU(context.window);
+
+  ImGui_ImplSDLGPU3_InitInfo initInfo{
+    .Device = context.device,
+    .ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(context.device, context.window),
+    .MSAASamples = SDL_GPU_SAMPLECOUNT_1
+  };
+
+  ImGui_ImplSDLGPU3_Init(&initInfo);
+
   return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppIterate(void* appstate){
+  ImGui_ImplSDLGPU3_NewFrame();
+  ImGui_ImplSDL3_NewFrame();
+  ImGui::NewFrame();
+
+  ImGui::Begin("Controls");
+  ImGui::Checkbox("Wireframe", &context.useWireframe);
+  ImGui::Text("words words words");
+  ImGui::End();
+
+  ImGui::Render();
+
   SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(context.device);
   if(!commandBuffer){
     std::cerr << "SDL_AcquireGPUCommandBuffer ERROR - " << SDL_GetError() << std::endl;
@@ -224,9 +256,15 @@ SDL_AppResult SDL_AppIterate(void* appstate){
     .texture = swapchainTexture,
   };
 
+  Imgui_ImplSDLGPU3_PrepareDrawData(ImGui::GetDrawData(), commandBuffer);
+
   SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, NULL);
 
-  SDL_BindGPUGraphicsPipeline(renderPass, context.graphicsPipelineStandard);
+  if(context.useWireframe){
+    SDL_BindGPUGraphicsPipeline(renderPass, context.graphicsPipelineWireframe);
+  }else{
+    SDL_BindGPUGraphicsPipeline(renderPass, context.graphicsPipelineStandard);
+  }
 
   SDL_GPUBufferBinding bufferBindings[1];
   bufferBindings[0].buffer = context.vertexBuffer;
@@ -239,14 +277,17 @@ SDL_AppResult SDL_AppIterate(void* appstate){
 
   SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
 
-  SDL_EndGPURenderPass(renderPass);
+  ImGui_ImplSDLGPU3_RenderDrawData(ImGui::GetDrawData(), commandBuffer, renderPass);
 
+  SDL_EndGPURenderPass(renderPass);
   SDL_SubmitGPUCommandBuffer(commandBuffer);
 
   return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event){
+  ImGui_ImplSDL3_ProcessEvent(event);
+
   if(event->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED){
     return SDL_APP_SUCCESS;
   }
@@ -255,6 +296,10 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event){
 }
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result){
+  ImGui_ImplSDLGPU3_Shutdown();
+  ImGui_ImplSDL3_Shutdown();
+  ImGui::DestroyContext();
+
   SDL_ReleaseGPUGraphicsPipeline(context.device, context.graphicsPipelineStandard);
   SDL_ReleaseGPUBuffer(context.device, context.vertexBuffer);
   SDL_DestroyGPUDevice(context.device);
