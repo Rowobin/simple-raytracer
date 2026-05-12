@@ -3,7 +3,7 @@
 #include <metal_texture>
 using namespace metal;
 
-#line 1 "shaders/shaders.slang"
+#line 1 "shaders.slang"
 struct vertexMain_Result_0
 {
     float4 position_0 [[position]];
@@ -31,22 +31,22 @@ struct VertexOutput_0
 [[vertex]] vertexMain_Result_0 vertexMain(vertexInput_0 _S1 [[stage_in]])
 {
 
-#line 17
+#line 24
     thread VertexOutput_0 vertexOutput_0;
 
     (&vertexOutput_0)->position_2 = float4(_S1.position_1, 1.0);
     (&vertexOutput_0)->color_2 = _S1.color_1;
 
-#line 20
+#line 27
     thread vertexMain_Result_0 _S2;
 
-#line 20
+#line 27
     (&_S2)->position_0 = vertexOutput_0.position_2;
 
-#line 20
+#line 27
     (&_S2)->color_0 = vertexOutput_0.color_2;
 
-#line 20
+#line 27
     return _S2;
 }
 

@@ -12,6 +12,13 @@ struct FragmentOutput{
   float4 color: SV_Target0;
 };
 
+struct Uniforms{
+  float time;
+};
+
+[[vk::binding(0)]] 
+ConstantBuffer<Uniforms> uniforms;
+
 [shader("vertex")]
 VertexOutput vertexMain(VertexInput vertexInput){
   VertexOutput vertexOutput;
@@ -26,7 +33,8 @@ VertexOutput vertexMain(VertexInput vertexInput){
 FragmentOutput fragmentMain(VertexOutput fragmentInput){
   FragmentOutput fragmentOutput;
 
-  fragmentOutput.color = fragmentInput.color;
+  float pulse = sin(uniforms.time * 2.0f) * 0.5f + 0.5f;
+  fragmentOutput.color = float4(fragmentInput.color.rgb * pulse, 1.0f);
 
   return fragmentOutput;
 }

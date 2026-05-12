@@ -14,206 +14,189 @@ struct Vertex{
   float r, g, b, a;
 };
 
-std::string basePath;
-SDL_Window* window;
-SDL_GPUDevice* device;
-SDL_GPUBuffer* vertexBuffer;
-SDL_GPUTransferBuffer* transferBuffer;
-SDL_GPUShader* vertexShader;
-SDL_GPUShader* fragmentShader;
-SDL_GPUGraphicsPipeline* graphicsPipeline;
-
-static Vertex vertices[] = {
-  {  0.0f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f,  1.0f},
-  { -0.5f, -0.5f,  0.0f,  0.0f,  1.0f,  0.0f,  1.0f},
-  {  0.5f, -0.5f,  0.0f,  0.0f,  0.0f,  1.0f,  1.0f}
+struct Uniform{
+  float time;
 };
 
-SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
-  window = SDL_CreateWindow(
-    "Simple Raytracer | C++20 | SDL3",
-    800,
-    800,
-    SDL_WINDOW_RESIZABLE
-  );
-  if(!window){
-    std::cerr << "SDL_CreateWindow ERROR - " << SDL_GetError() << std::endl;
-    return SDL_APP_FAILURE;
-  }
+struct Context{
+  std::string basePath;
+  Uniform uniformData;
+  SDL_Window* window;
+  SDL_GPUDevice* device;
+  SDL_GPUBuffer* vertexBuffer;
+  SDL_GPUGraphicsPipeline* graphicsPipelineStandard;
+};
+Context context;
 
-  device = SDL_CreateGPUDevice(
+int contextInit(Context* context){
+  context->window = SDL_CreateWindow("Simple Raytracer", 800, 800, SDL_WINDOW_RESIZABLE);
+  if(!context->window){
+    std::cerr << "SDL_CreateWindow ERROR - " << SDL_GetError() << std::endl;
+    return -1;
+  }
+  
+  context->device = SDL_CreateGPUDevice(
 #ifdef __APPLE__
     SDL_GPU_SHADERFORMAT_MSL,
 #else
     SDL_GPU_SHADERFORMAT_SPIRV,
-#endif 
+#endif
     false,
     NULL
   );
-  if(!device){
+  if(!context->device){
     std::cerr << "SDL_CreateGPUDevice ERROR - " << SDL_GetError() << std::endl;
+    return -1;
+  }
+  SDL_ClaimWindowForGPUDevice(context->device, context->window);
+
+  context->basePath = std::string(SDL_GetBasePath());
+  return 0;
+}
+
+SDL_GPUShader* loadShader(Context* context, const char* relPath, const char* entry, SDL_GPUShaderFormat format, SDL_GPUShaderStage stage,
+    Uint32 samplers, Uint32 storage_textures, Uint32 storage_buffers, Uint32 uniform_buffers){
+  size_t shaderSize;
+  void* shaderCode = SDL_LoadFile((context->basePath + relPath).c_str(), &shaderSize);
+  if(!shaderCode){
+    std::cerr << "SDL_LoadFile ERROR - " << SDL_GetError() << std::endl;
+    return nullptr;
+  }
+  SDL_GPUShaderCreateInfo shaderInfo{
+    .code = (Uint8*) shaderCode,
+    .code_size = shaderSize,
+    .entrypoint = entry,
+    .format = format,
+    .stage = stage,
+    .num_samplers = samplers,
+    .num_storage_textures = storage_textures,
+    .num_storage_buffers = storage_buffers,
+    .num_uniform_buffers = uniform_buffers
+  };
+  SDL_GPUShader* shader = SDL_CreateGPUShader(context->device, &shaderInfo);
+  SDL_free(shaderCode);
+  if(!shader){
+    std::cerr << "SDL_CreateGPUShader ERROR - " << SDL_GetError() << std::endl;
+    return nullptr;
+  }
+  return shader;
+}
+  
+SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
+
+  if(contextInit(&context) == -1){
     return SDL_APP_FAILURE;
   }
 
-  SDL_ClaimWindowForGPUDevice(device, window);
-
-  basePath = std::string(SDL_GetBasePath());
-
-  size_t vertexCodeSize;
 #ifdef __APPLE__
-  void* vertexCode = SDL_LoadFile((basePath + "shaders/metal/vertex.metal").c_str(), &vertexCodeSize);
+  SDL_GPUShader* vertexShader = loadShader(&context, "shaders/metal/vertex.metal", "vertexMain", SDL_GPU_SHADERFORMAT_MSL, 
+      SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 0, 0);
+  SDL_GPUShader* fragmentShader = loadShader(&context, "shaders/metal/fragment.metal", "fragmentMain", SDL_GPU_SHADERFORMAT_MSL,
+      SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0, 0, 1);
 #else
-  void* vertexCode = SDL_LoadFile((basePath + "shaders/spirv/vertex.spv").c_str(), &vertexCodeSize);
+  SDL_GPUShader* vertexShader = loadShader(&context, "shaders/spirv/vertex.spv", "vertexMain", SDL_GPU_SHADERFORMAT_SPIRV,
+      SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 0, 0);
+  SDL_GPUShader* fragmentShader = loadShader(&context, "shaders/spirv/fragment.spv", "fragmentMain", SDL_GPU_SHADERFORMAT_SPIRV,
+      SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0, 0, 1);
 #endif
-  if(!vertexCode){
-    std::cout << "SDL_LoadFile ERROR - " << SDL_GetError() << std::endl;
+
+  if(!vertexShader || !fragmentShader){
     return SDL_APP_FAILURE;
   }
-  SDL_GPUShaderCreateInfo vertexInfo{};
-  vertexInfo.code = (Uint8*) vertexCode;
-  vertexInfo.code_size = vertexCodeSize;
-  vertexInfo.entrypoint = "vertexMain";
-#ifdef __APPLE__
-  vertexInfo.format = SDL_GPU_SHADERFORMAT_MSL;
-#else
-  vertexInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-#endif
-  vertexInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-  vertexInfo.num_samplers = 0;
-  vertexInfo.num_storage_buffers = 0;
-  vertexInfo.num_uniform_buffers = 0;
-  vertexShader = SDL_CreateGPUShader(device, &vertexInfo);
-  if(!vertexShader){
-    std::cout << "SDL_CreateGPUShader ERROR - " << SDL_GetError() << std::endl;
-    return SDL_APP_FAILURE;
-  }
-  SDL_free(vertexCode);
 
-  size_t fragmentCodeSize;
-#ifdef __APPLE__
-  void* fragmentCode = SDL_LoadFile((basePath + "shaders/metal/fragment.metal").c_str(), &fragmentCodeSize);
-#else
-  void* fragmentCode = SDL_LoadFile((basePath + "shaders/spirv/fragment.spv").c_str(), &fragmentCodeSize);
-#endif
-  if(!fragmentCode){
-    std::cout << "SDL_LoadFile ERROR - " << SDL_GetError() << std::endl;
-    return SDL_APP_FAILURE;
-  }
-  SDL_GPUShaderCreateInfo fragmentInfo{};
-  fragmentInfo.code = (Uint8*) fragmentCode;
-  fragmentInfo.code_size = fragmentCodeSize;
-  fragmentInfo.entrypoint = "fragmentMain";
-#ifdef __APPLE__
-  fragmentInfo.format = SDL_GPU_SHADERFORMAT_MSL;
-#else
-  fragmentInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-#endif
-  fragmentInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-  fragmentInfo.num_samplers = 0;
-  fragmentInfo.num_storage_textures = 0;
-  fragmentInfo.num_uniform_buffers = 0;
-  fragmentShader = SDL_CreateGPUShader(device, &fragmentInfo);
-  if(!fragmentShader){
-    std::cout << "SDL_CreateGPUShader ERROR - " << SDL_GetError() << std::endl;
-    return SDL_APP_FAILURE;
-  }
-  SDL_free(fragmentCode);
+  SDL_GPUVertexBufferDescription vertexBufferDescription[1] = {
+    {.slot = 0, .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0, .pitch = sizeof(Vertex)}
+  };
 
-  SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-  pipelineInfo.vertex_shader = vertexShader;
-  pipelineInfo.fragment_shader = fragmentShader;
-  pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+  SDL_GPUVertexAttribute vertexAttribute[2] = {
+    {.buffer_slot = 0, .location = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0},
+    {.buffer_slot = 0, .location = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * sizeof(float)}
+  };
 
-  SDL_GPUVertexBufferDescription vertexBufferDescriptions[1];
-  vertexBufferDescriptions[0].slot = 0;
-  vertexBufferDescriptions[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-  vertexBufferDescriptions[0].instance_step_rate = 0;
-  vertexBufferDescriptions[0].pitch = sizeof(Vertex);
+  SDL_GPUColorTargetDescription colorTargetDescription[1] = {
+    {.format = SDL_GetGPUSwapchainTextureFormat(context.device, context.window)}
+  };
 
-  pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-  pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexBufferDescriptions;
+  SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{
+    .vertex_shader = vertexShader,
+    .fragment_shader = fragmentShader,
+    .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+    .vertex_input_state.num_vertex_buffers = 1,
+    .vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription,
+    .vertex_input_state.num_vertex_attributes = 2,
+    .vertex_input_state.vertex_attributes = vertexAttribute,
+    .target_info.num_color_targets = 1,
+    .target_info.color_target_descriptions = colorTargetDescription
+  };
 
-  SDL_GPUVertexAttribute vertexAttributes[2];
-  vertexAttributes[0].buffer_slot = 0;
-  vertexAttributes[0].location = 0;
-  vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-  vertexAttributes[0].offset = 0;
-  vertexAttributes[1].buffer_slot = 0;
-  vertexAttributes[1].location = 1;
-  vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
-  vertexAttributes[1].offset = 3 * sizeof(float);
-
-  pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
-  pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
-
-  SDL_GPUColorTargetDescription colorTargetDescriptions[1];
-  colorTargetDescriptions[0] = {};
-  colorTargetDescriptions[0].format = SDL_GetGPUSwapchainTextureFormat(device, window);
-
-  pipelineInfo.target_info.num_color_targets = 1;
-  pipelineInfo.target_info.color_target_descriptions = colorTargetDescriptions;
-
-  graphicsPipeline = SDL_CreateGPUGraphicsPipeline(device, &pipelineInfo);
-  if(!graphicsPipeline){
+  context.graphicsPipelineStandard = SDL_CreateGPUGraphicsPipeline(context.device, &pipelineInfo);
+  if(!context.graphicsPipelineStandard){
     std::cout << "SDL_CreateGPUGraphicsPipeline ERROR - " << SDL_GetError() << std::endl;
     return SDL_APP_FAILURE;
   }
 
-  SDL_ReleaseGPUShader(device, vertexShader);
-  vertexShader = nullptr;
-  SDL_ReleaseGPUShader(device, fragmentShader);
-  fragmentShader = nullptr;
+  SDL_ReleaseGPUShader(context.device, vertexShader);
+  SDL_ReleaseGPUShader(context.device, fragmentShader);
 
-  SDL_GPUBufferCreateInfo bufferInfo{};
-  bufferInfo.size = sizeof(vertices);
-  bufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-  vertexBuffer = SDL_CreateGPUBuffer(device, &bufferInfo);
-  if(!vertexBuffer){
+  Vertex vertices[] = {
+    {  0.0f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f,  1.0f},
+    { -0.5f, -0.5f,  0.0f,  0.0f,  1.0f,  0.0f,  1.0f},
+    {  0.5f, -0.5f,  0.0f,  0.0f,  0.0f,  1.0f,  1.0f}
+  };
+
+  SDL_GPUBufferCreateInfo bufferInfo{
+    .size = sizeof(vertices),
+    .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+  };
+  context.vertexBuffer = SDL_CreateGPUBuffer(context.device, &bufferInfo);
+  if(!context.vertexBuffer){
     std::cerr << "SDL_CreateGPUBuffer ERROR - " << SDL_GetError() << std::endl;
     return SDL_APP_FAILURE;
   }
 
-  SDL_GPUTransferBufferCreateInfo transferInfo{};
-  transferInfo.size = sizeof(vertices);
-  transferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  transferBuffer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
+  SDL_GPUTransferBufferCreateInfo transferInfo{
+    .size = sizeof(vertices),
+    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD
+  };
+  SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(context.device, &transferInfo);
   if(!transferBuffer){
     std::cerr << "SDL_CreateGPUTransferBuffer ERROR - " << SDL_GetError() << std::endl;
     return SDL_APP_FAILURE;
   }
 
-  Vertex* data = (Vertex*) SDL_MapGPUTransferBuffer(device, transferBuffer, false);
+  Vertex* data = (Vertex*) SDL_MapGPUTransferBuffer(context.device, transferBuffer, false);
   SDL_memcpy(data, vertices, sizeof(vertices));
-  SDL_UnmapGPUTransferBuffer(device, transferBuffer);
+  SDL_UnmapGPUTransferBuffer(context.device, transferBuffer);
 
-  SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(device);
+  SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(context.device);
   if(!commandBuffer){
     std::cerr << "SDL_AcquireGPUCommandBuffer ERROR - " << SDL_GetError() << std::endl;
     return SDL_APP_FAILURE;
   }
 
   SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
-  SDL_GPUTransferBufferLocation location{};
-  location.transfer_buffer = transferBuffer;
-  location.offset = 0;
+  SDL_GPUTransferBufferLocation location{
+    .transfer_buffer = transferBuffer,
+    .offset = 0
+  };
 
-  SDL_GPUBufferRegion region{};
-  region.buffer = vertexBuffer;
-  region.size = sizeof(vertices);
-  region.offset = 0;
-
+  SDL_GPUBufferRegion region{
+    .buffer = context.vertexBuffer,
+    .size = sizeof(vertices),
+    .offset = 0
+  };
   SDL_UploadToGPUBuffer(copyPass, &location, &region, true);
-
   SDL_EndGPUCopyPass(copyPass);
+
   SDL_SubmitGPUCommandBuffer(commandBuffer);
-  SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-  transferBuffer = nullptr;
+
+  SDL_ReleaseGPUTransferBuffer(context.device, transferBuffer);
 
   return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppIterate(void* appstate){
-  SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(device);
+  SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(context.device);
   if(!commandBuffer){
     std::cerr << "SDL_AcquireGPUCommandBuffer ERROR - " << SDL_GetError() << std::endl;
     return SDL_APP_FAILURE;
@@ -223,7 +206,7 @@ SDL_AppResult SDL_AppIterate(void* appstate){
   Uint32 width, height;
   SDL_WaitAndAcquireGPUSwapchainTexture(
       commandBuffer,
-      window, 
+      context.window, 
       &swapchainTexture,
       &width,
       &height
@@ -234,21 +217,25 @@ SDL_AppResult SDL_AppIterate(void* appstate){
     return SDL_APP_CONTINUE;
   }
 
-  SDL_GPUColorTargetInfo colorTargetInfo{};
-  colorTargetInfo.clear_color = {0.8f, 0.8f, 0.8f, 1.0f};
-  colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-  colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
-  colorTargetInfo.texture = swapchainTexture;
+  SDL_GPUColorTargetInfo colorTargetInfo{
+    .clear_color = {0.8f, 0.8f, 0.8f, 1.0f},
+    .load_op = SDL_GPU_LOADOP_CLEAR,
+    .store_op = SDL_GPU_STOREOP_STORE,
+    .texture = swapchainTexture,
+  };
 
   SDL_GPURenderPass* renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, NULL);
 
-  SDL_BindGPUGraphicsPipeline(renderPass, graphicsPipeline);
+  SDL_BindGPUGraphicsPipeline(renderPass, context.graphicsPipelineStandard);
 
   SDL_GPUBufferBinding bufferBindings[1];
-  bufferBindings[0].buffer = vertexBuffer;
+  bufferBindings[0].buffer = context.vertexBuffer;
   bufferBindings[0].offset = 0;
 
   SDL_BindGPUVertexBuffers(renderPass, 0, bufferBindings, 1);
+
+  context.uniformData.time = SDL_GetTicksNS() / 1e9f;
+  SDL_PushGPUFragmentUniformData(commandBuffer, 0, &context.uniformData, sizeof(Uniform));
 
   SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
 
@@ -268,13 +255,8 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event){
 }
 
 void SDL_AppQuit(void* appstate, SDL_AppResult result){
-  if(device){
-    if(graphicsPipeline) SDL_ReleaseGPUGraphicsPipeline(device, graphicsPipeline);
-    if(fragmentShader) SDL_ReleaseGPUShader(device, fragmentShader);
-    if(vertexShader) SDL_ReleaseGPUShader(device, vertexShader);
-    if(transferBuffer) SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
-    if(vertexBuffer) SDL_ReleaseGPUBuffer(device, vertexBuffer);
-    SDL_DestroyGPUDevice(device);
-  }
-  if(window) SDL_DestroyWindow(window);
+  SDL_ReleaseGPUGraphicsPipeline(context.device, context.graphicsPipelineStandard);
+  SDL_ReleaseGPUBuffer(context.device, context.vertexBuffer);
+  SDL_DestroyGPUDevice(context.device);
+  SDL_DestroyWindow(context.window);
 }

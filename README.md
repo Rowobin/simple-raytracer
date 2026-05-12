@@ -50,20 +50,20 @@ cmake --build build-native
 
 ### Building shaders
 
-This program comes with pre-compiled SPIRV and MSL shaders. If you want to compile these shaders yourself, you will
-need to use a shader compiler. Personally, I just use glslc and spirv-cross, which can be installed using the Vulkan SDK.
+This program uses Slang for its shaders. In addition to that, there are pre-compiled SPIRV and MSL shaders. If 
+you want to compile the shaders yourself, you will need to download the Slang compiler.
 
 ```bash
-glslc -fshader-stage=vertex vert.glsl -o vert.spv
-glslc -fshader-stage=fragment frag.glsl -o frag.spv
+slangc shaders/shaders.slang -entry vertexMain -stage vertex -target spirv -o vertex.spv
+slangc shaders/shaders.slang -entry fragmentMain -stage fragment -target psirv -o fragment.spv
 
-spirv-cross vert.spv --msl --output vert.msl
-spirv-cross frag.spv --msl --output frag.msl
+slangc shaders/shaders.slang -entry vertexMain -stage vertex -target metal -o vertex.metal
+slangc shaders/shaders.slang -entry fragmentMain -stage fragment -target metal -o fragment.metal
 ```
 
 ## Chapters
 
-Isimple f you want to build your own raytracing engine, I wrote X chapters explaining how I created this one:
+If you want to build your own raytracing engine, I wrote X chapters explaining how I created this one:
 
 **[Chapter 1](#)** - Project set up
 
