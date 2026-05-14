@@ -1,11 +1,11 @@
 struct VertexInput{
-  [vk::location(0)] float3 position;
-  [vk::location(1)] float4 color;
+  float3 position;
+  float4 color;
 };
 
 struct VertexOutput{
   float4 position: SV_Position;
-  [vk::location(0)] float4 color;
+  float4 color;
 };
 
 struct FragmentOutput{
@@ -15,9 +15,7 @@ struct FragmentOutput{
 struct Uniforms{
   float time;
 };
-
-[[vk::binding(0)]] 
-ConstantBuffer<Uniforms> uniforms;
+layout(binding=0, set=3) ConstantBuffer<Uniforms> uniforms;
 
 [shader("vertex")]
 VertexOutput vertexMain(VertexInput vertexInput){
@@ -34,7 +32,7 @@ FragmentOutput fragmentMain(VertexOutput fragmentInput){
   FragmentOutput fragmentOutput;
 
   float pulse = sin(uniforms.time * 2.0f) * 0.5f + 0.5f;
-  fragmentOutput.color = float4(fragmentInput.color.rgb * pulse, 1.0f);
+  fragmentOutput.color = float4(pulse * fragmentInput.color.rgb, 1.0f);
 
   return fragmentOutput;
 }

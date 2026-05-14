@@ -98,6 +98,7 @@ set_target_properties(simple_raytracer PROPERTIES
 )
 
 # copy shaders into build folder
+message(STATUS "Copying shaders...")
 add_custom_command(TARGET simple_raytracer
   POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory

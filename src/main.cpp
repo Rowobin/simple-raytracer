@@ -30,14 +30,14 @@ struct Context{
 };
 Context context;
 
-int contextInit(Context* context){
-  context->window = SDL_CreateWindow("Simple Raytracer", 800, 800, SDL_WINDOW_RESIZABLE);
-  if(!context->window){
+int contextInit(Context* contextRef){
+  contextRef->window = SDL_CreateWindow("Simple Raytracer", 800, 800, SDL_WINDOW_RESIZABLE);
+  if(!contextRef->window){
     std::cerr << "SDL_CreateWindow ERROR - " << SDL_GetError() << std::endl;
     return -1;
   }
   
-  context->device = SDL_CreateGPUDevice(
+  contextRef->device = SDL_CreateGPUDevice(
 #ifdef __APPLE__
     SDL_GPU_SHADERFORMAT_MSL,
 #else
@@ -46,27 +46,27 @@ int contextInit(Context* context){
     false,
     NULL
   );
-  if(!context->device){
+  if(!contextRef->device){
     std::cerr << "SDL_CreateGPUDevice ERROR - " << SDL_GetError() << std::endl;
     return -1;
   }
-  SDL_ClaimWindowForGPUDevice(context->device, context->window);
+  SDL_ClaimWindowForGPUDevice(contextRef->device, contextRef->window);
 
-  context->basePath = std::string(SDL_GetBasePath());
+  contextRef->basePath = std::string(SDL_GetBasePath());
   return 0;
 }
 
-SDL_GPUShader* loadShader(Context* context, const char* relPath, const char* entry, SDL_GPUShaderFormat format, SDL_GPUShaderStage stage,
+SDL_GPUShader* loadShader(Context* contextRef, const char* relPath, const char* entry, SDL_GPUShaderFormat format, SDL_GPUShaderStage stage,
     Uint32 samplers, Uint32 storage_textures, Uint32 storage_buffers, Uint32 uniform_buffers){
   size_t shaderSize;
-  void* shaderCode = SDL_LoadFile((context->basePath + relPath).c_str(), &shaderSize);
+  void* shaderCode = SDL_LoadFile((contextRef->basePath + relPath).c_str(), &shaderSize);
   if(!shaderCode){
     std::cerr << "SDL_LoadFile ERROR - " << SDL_GetError() << std::endl;
     return nullptr;
   }
   SDL_GPUShaderCreateInfo shaderInfo{
-    .code = (Uint8*) shaderCode,
     .code_size = shaderSize,
+    .code = (Uint8*) shaderCode,
     .entrypoint = entry,
     .format = format,
     .stage = stage,
@@ -75,7 +75,7 @@ SDL_GPUShader* loadShader(Context* context, const char* relPath, const char* ent
     .num_storage_buffers = storage_buffers,
     .num_uniform_buffers = uniform_buffers
   };
-  SDL_GPUShader* shader = SDL_CreateGPUShader(context->device, &shaderInfo);
+  SDL_GPUShader* shader = SDL_CreateGPUShader(contextRef->device, &shaderInfo);
   SDL_free(shaderCode);
   if(!shader){
     std::cerr << "SDL_CreateGPUShader ERROR - " << SDL_GetError() << std::endl;
@@ -95,9 +95,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
   SDL_GPUShader* fragmentShader = loadShader(&context, "shaders/metal/fragment.metal", "fragmentMain", SDL_GPU_SHADERFORMAT_MSL,
       SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0, 0, 1);
 #else
-  SDL_GPUShader* vertexShader = loadShader(&context, "shaders/spirv/vertex.spv", "vertexMain", SDL_GPU_SHADERFORMAT_SPIRV,
+  SDL_GPUShader* vertexShader = loadShader(&context, "shaders/spirv/vertex.spv", "main", SDL_GPU_SHADERFORMAT_SPIRV,
       SDL_GPU_SHADERSTAGE_VERTEX, 0, 0, 0, 0);
-  SDL_GPUShader* fragmentShader = loadShader(&context, "shaders/spirv/fragment.spv", "fragmentMain", SDL_GPU_SHADERFORMAT_SPIRV,
+  SDL_GPUShader* fragmentShader = loadShader(&context, "shaders/spirv/fragment.spv", "main", SDL_GPU_SHADERFORMAT_SPIRV,
       SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0, 0, 1);
 #endif
 
@@ -106,31 +106,39 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
   }
 
   SDL_GPUVertexBufferDescription vertexBufferDescription[1] = {
-    {.slot = 0, .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0, .pitch = sizeof(Vertex)}
+    {.slot = 0, .pitch = sizeof(Vertex), .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0}
   };
 
   SDL_GPUVertexAttribute vertexAttribute[2] = {
-    {.buffer_slot = 0, .location = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0},
-    {.buffer_slot = 0, .location = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * sizeof(float)}
+    {.location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = 0},
+    {.location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * sizeof(float)}
+  };
+
+  SDL_GPUVertexInputState vertexInputState{
+    .vertex_buffer_descriptions = vertexBufferDescription,
+    .num_vertex_buffers = 1,
+    .vertex_attributes = vertexAttribute,
+    .num_vertex_attributes = 2
   };
 
   SDL_GPUColorTargetDescription colorTargetDescription[1] = {
     {.format = SDL_GetGPUSwapchainTextureFormat(context.device, context.window)}
   };
 
+  SDL_GPUGraphicsPipelineTargetInfo targetInfo{
+    .color_target_descriptions = colorTargetDescription,
+    .num_color_targets = 1,
+  };
+
   SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{
     .vertex_shader = vertexShader,
     .fragment_shader = fragmentShader,
+    .vertex_input_state = vertexInputState,
     .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-    .vertex_input_state.num_vertex_buffers = 1,
-    .vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription,
-    .vertex_input_state.num_vertex_attributes = 2,
-    .vertex_input_state.vertex_attributes = vertexAttribute,
-    .target_info.num_color_targets = 1,
-    .target_info.color_target_descriptions = colorTargetDescription,
-    .rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL
+    .target_info = targetInfo
   };
 
+  pipelineInfo.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
   context.graphicsPipelineStandard = SDL_CreateGPUGraphicsPipeline(context.device, &pipelineInfo);
   if(!context.graphicsPipelineStandard){
     std::cout << "SDL_CreateGPUGraphicsPipeline ERROR - " << SDL_GetError() << std::endl;
@@ -154,8 +162,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
   };
 
   SDL_GPUBufferCreateInfo bufferInfo{
-    .size = sizeof(vertices),
     .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+    .size = sizeof(vertices),
   };
   context.vertexBuffer = SDL_CreateGPUBuffer(context.device, &bufferInfo);
   if(!context.vertexBuffer){
@@ -164,8 +172,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
   }
 
   SDL_GPUTransferBufferCreateInfo transferInfo{
-    .size = sizeof(vertices),
-    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD
+    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    .size = sizeof(vertices)
   };
   SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(context.device, &transferInfo);
   if(!transferBuffer){
@@ -191,8 +199,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
 
   SDL_GPUBufferRegion region{
     .buffer = context.vertexBuffer,
-    .size = sizeof(vertices),
-    .offset = 0
+    .offset = 0,
+    .size = sizeof(vertices)
   };
   SDL_UploadToGPUBuffer(copyPass, &location, &region, true);
   SDL_EndGPUCopyPass(copyPass);
@@ -250,10 +258,10 @@ SDL_AppResult SDL_AppIterate(void* appstate){
   }
 
   SDL_GPUColorTargetInfo colorTargetInfo{
+    .texture = swapchainTexture,
     .clear_color = {0.8f, 0.8f, 0.8f, 1.0f},
     .load_op = SDL_GPU_LOADOP_CLEAR,
-    .store_op = SDL_GPU_STOREOP_STORE,
-    .texture = swapchainTexture,
+    .store_op = SDL_GPU_STOREOP_STORE
   };
 
   Imgui_ImplSDLGPU3_PrepareDrawData(ImGui::GetDrawData(), commandBuffer);
@@ -301,6 +309,7 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result){
   ImGui::DestroyContext();
 
   SDL_ReleaseGPUGraphicsPipeline(context.device, context.graphicsPipelineStandard);
+  SDL_ReleaseGPUGraphicsPipeline(context.device, context.graphicsPipelineWireframe);
   SDL_ReleaseGPUBuffer(context.device, context.vertexBuffer);
   SDL_DestroyGPUDevice(context.device);
   SDL_DestroyWindow(context.window);
