@@ -98,10 +98,15 @@ set_target_properties(simple_raytracer PROPERTIES
 )
 
 # copy shaders into build folder
-message(STATUS "Copying shaders...")
-add_custom_command(TARGET simple_raytracer
-  POST_BUILD
+add_custom_target(copy_shaders
+  ALL
+    COMMAND echo "Compiling shaders..."
+    COMMAND bash ${CMAKE_SOURCE_DIR}/shaders/compile_shaders.sh
+    COMMAND echo "Copying shaders..."
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-      ${CMAKE_SOURCE_DIR}/shaders
-      $<TARGET_FILE_DIR:simple_raytracer>/shaders
+      ${CMAKE_SOURCE_DIR}/shaders/spirv 
+      $<TARGET_FILE_DIR:simple_raytracer>/shaders/spirv
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      ${CMAKE_SOURCE_DIR}/shaders/metal
+      $<TARGET_FILE_DIR:simple_raytracer>/shaders/metal
 )
