@@ -54,11 +54,11 @@ This program uses Slang for its shaders. In addition to that, there are pre-comp
 you want to compile the shaders yourself, you will need to download the Slang compiler.
 
 ```bash
-slangc shaders/shaders.slang -entry vertexMain -stage vertex -target spirv -o vertex.spv
-slangc shaders/shaders.slang -entry fragmentMain -stage fragment -target psirv -o fragment.spv
+slangc shaders.slang -entry vertexMain -stage vertex -target spirv -o spirv/vertex.spv
+slangc shaders.slang -entry fragmentMain -stage fragment -target spirv -o spirv/fragment.spv
 
-slangc shaders/shaders.slang -entry vertexMain -stage vertex -target metal -o vertex.metal
-slangc shaders/shaders.slang -entry fragmentMain -stage fragment -target metal -o fragment.metal
+slangc shaders.slang -entry vertexMain -stage vertex -target metal -o metal/vertex.metal
+slangc shaders.slang -entry fragmentMain -stage fragment -target metal -o metal/fragment.metal
 ```
 
 ## Chapters

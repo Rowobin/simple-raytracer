@@ -31,7 +31,7 @@ struct Context{
 Context context;
 
 int contextInit(Context* contextRef){
-  contextRef->window = SDL_CreateWindow("Simple Raytracer", 800, 800, SDL_WINDOW_RESIZABLE);
+  contextRef->window = SDL_CreateWindow("Simple Raytracer", 512, 512, 0);
   if(!contextRef->window){
     std::cerr << "SDL_CreateWindow ERROR - " << SDL_GetError() << std::endl;
     return -1;
@@ -298,6 +298,11 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event){
 
   if(event->type == SDL_EVENT_WINDOW_CLOSE_REQUESTED){
     return SDL_APP_SUCCESS;
+  }
+
+  if(event->type == SDL_EVENT_KEY_DOWN && event->key.key == SDLK_I){
+    Uint32 IsResizable = SDL_GetWindowFlags(context.window) & SDL_WINDOW_RESIZABLE;
+    SDL_SetWindowResizable(context.window, IsResizable == 0);
   }
 
   return SDL_APP_CONTINUE;
