@@ -1,48 +1,23 @@
-struct VertexInput{
-  float3 position;
-  float4 color;
+[format("rgba8")]
+layout(binding=0, set=1) RWTexture2D<float4> OutImage;
+
+struct ComputeUniform{
+  int wWidth;
+  int wHeight;
 };
+layout(binding=0, set=2) ConstantBuffer<ComputeUniform> computeUniform;
 
-struct VertexOutput{
-  float4 position: SV_Position;
-  float4 color;
-};
-
-struct FragmentOutput{
-  float4 color: SV_Target0;
-};
-
-struct Uniforms{
-  float time;
-};
-layout(binding=0, set=3) ConstantBuffer<Uniforms> uniforms;
-
-[shader("vertex")]
-VertexOutput vertexMain(VertexInput vertexInput){
-  VertexOutput vertexOutput;
-  
-  vertexOutput.position = float4(vertexInput.position, 1.0f);
-  vertexOutput.color = vertexInput.color;
-
-  return vertexOutput;
-}
-
-float gamma_correct(float c){
-  if(c <= 0.0031308f){
-    return c * 12.92f;
+[shader("compute")]
+[numthreads(8,8,1)]
+void computeMain(uint3 dispatchThreadID : SV_DispatchThreadID){
+  float u = (float) dispatchThreadID.x / computeUniform.wWidth;
+  if(u > 0.75f){
+    OutImage[int2(dispatchThreadID.xy)] = float4(1.0f, 0.0f, 0.0f, 1.0f);
+  } else if (u > 0.50f){
+    OutImage[int2(dispatchThreadID.xy)] = float4(0.0f, 1.0f, 0.0f, 1.0f);
+  } else if (u > 0.25f){
+    OutImage[int2(dispatchThreadID.xy)] = float4(0.0f, 0.0f, 1.0f, 1.0f);
+  } else {
+    OutImage[int2(dispatchThreadID.xy)] = float4(0.0f, 0.0f, 0.0f, 1.0f);
   }
-  return 1.055f * pow(c, 1.0f / 2.4f) - 0.055f;
-}
-
-[shader("fragment")]
-FragmentOutput fragmentMain(VertexOutput fragmentInput){
-  FragmentOutput fragmentOutput;
-
-  float pulse = sin(uniforms.time * 2.0f) * 0.5f + 0.5f;
-  fragmentOutput.color = float4(pulse * fragmentInput.color.rgb, 1.0f);
-  fragmentOutput.color.r = gamma_correct(fragmentOutput.color.r);
-  fragmentOutput.color.g = gamma_correct(fragmentOutput.color.g);
-  fragmentOutput.color.b = gamma_correct(fragmentOutput.color.b);
-
-  return fragmentOutput;
 }

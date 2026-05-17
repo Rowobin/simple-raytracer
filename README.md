@@ -48,17 +48,17 @@ cmake --build build-native
 ./build-native/simple_raytracer.exe
 ```
 
+**Note:** cmake will fetch and compile the SDL3 library if it can't be find it on your machine.
+
 ### Building shaders
 
 This program uses Slang for its shaders. In addition to that, there are pre-compiled SPIRV and MSL shaders. If 
 you want to compile the shaders yourself, you will need to download the Slang compiler.
 
 ```bash
-slangc shaders.slang -entry vertexMain -stage vertex -target spirv -o spirv/vertex.spv
-slangc shaders.slang -entry fragmentMain -stage fragment -target spirv -o spirv/fragment.spv
+slangc shaders.slang -entry computeMain -stage compute -target spirv -o spirv/compute.spv
 
-slangc shaders.slang -entry vertexMain -stage vertex -target metal -o metal/vertex.metal
-slangc shaders.slang -entry fragmentMain -stage fragment -target metal -o metal/fragment.metal
+slangc shaders.slang -entry computeMain -stage vertex -target metal -o metal/compute.metal
 ```
 
 ## Chapters
