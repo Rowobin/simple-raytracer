@@ -53,7 +53,25 @@ Sphere_0 Sphere_x24init_0(float3 center_1, float radius_1, const Material_0 thre
 }
 
 
-#line 49
+#line 1204 "core.meta.slang"
+float float_getPi_0()
+{
+
+#line 1204
+    return 3.14159274101257324;
+}
+
+
+#line 13611 "hlsl.meta.slang"
+float radians_0(float x_0)
+{
+
+#line 13622
+    return x_0 * (float_getPi_0() / 180.0);
+}
+
+
+#line 49 "/Users/rowobin/Documents/GitHub/simple-raytracer/shaders/shaders.slang"
 float rand_0(float seed_0)
 {
 
@@ -704,74 +722,87 @@ float4 ray_color_0(const Ray_0 thread* _S18, const array<Sphere_0, int(5)> threa
 #line 193
     world_0[int(4)] = _S48;
 
-#line 200
-    float3 camera_center_0 = float3(0.0, 0.0, 0.0);
 
 
+    float3 look_from_0 = float3(-2.0, 2.0, 2.0);
 
-    float3 viewport_u_0 = float3(2.0 * (float(computeUniform_1->w_width_0) / float(computeUniform_1->w_height_0)), 0.0, 0.0);
-    float3 viewport_v_0 = float3(0.0, -2.0, 0.0);
+#line 202
+    float3 _S49 = look_from_0 - float3(0.0, 0.0, -1.0);
+
+#line 202
+    float focal_length_0 = length(_S49);
+
+
+    float viewport_height_0 = 2.0 * tan(radians_0(45.0) / 2.0) * focal_length_0;
+
+
+    float3 w_0 = normalize(_S49);
+    float3 u_0 = normalize(cross(float3(0.0, 1.0, 0.0), w_0));
+
+#line 214
+    float3 viewport_u_0 = float3((viewport_height_0 * (float(computeUniform_1->w_width_0) / float(computeUniform_1->w_height_0))))  * u_0;
+    float3 viewport_v_0 = float3(- viewport_height_0)  * cross(w_0, u_0);
 
     float3 pixel_u_0 = viewport_u_0 / float3(float(computeUniform_1->w_width_0)) ;
     float3 pixel_v_0 = viewport_v_0 / float3(float(computeUniform_1->w_height_0)) ;
 
-#line 208
-    float3 _S49 = float3(2.0) ;
+#line 218
+    float3 _S50 = float3(2.0) ;
 
-    float3 _S50 = camera_center_0 - float3(0.0, 0.0, 1.0) - viewport_u_0 / _S49 - viewport_v_0 / _S49 + pixel_u_0 / _S49 + pixel_v_0 / _S49;
+    float3 _S51 = look_from_0 - float3(focal_length_0)  * w_0 - viewport_u_0 / _S50 - viewport_v_0 / _S50 + pixel_u_0 / _S50 + pixel_v_0 / _S50;
 
     thread float4 color_3 = _S34;
 
-#line 212
+#line 222
     int i_1 = int(0);
     for(;;)
     {
 
-#line 213
+#line 223
         if(i_1 < int(100))
         {
         }
         else
         {
 
-#line 213
+#line 223
             break;
         }
 
-#line 214
-        float _S51 = float(dispatchThreadID_0.x);
+#line 224
+        float _S52 = float(dispatchThreadID_0.x);
 
-#line 214
-        float _S52 = float(dispatchThreadID_0.y);
+#line 224
+        float _S53 = float(dispatchThreadID_0.y);
 
-#line 214
-        float rand_seed_0 = _S51 * 1.97300004959106445 + _S52 * 9.27000045776367188 + float(i_1) * 3.69000005722045898;
+#line 224
+        float rand_seed_0 = _S52 * 1.97300004959106445 + _S53 * 9.27000045776367188 + float(i_1) * 3.69000005722045898;
 
-#line 214
-        thread Ray_0 _S53 = Ray_x24init_0(camera_center_0, _S50 + float3((_S51 + rand_0(rand_seed_0) - 0.5))  * pixel_u_0 + float3((_S52 + rand_0(rand_seed_0 + 3.70000004768371582) - 0.5))  * pixel_v_0);
+#line 224
+        thread Ray_0 _S54 = Ray_x24init_0(look_from_0, _S51 + float3((_S52 + rand_0(rand_seed_0) - 0.5))  * pixel_u_0 + float3((_S53 + rand_0(rand_seed_0 + 3.70000004768371582) - 0.5))  * pixel_v_0 - look_from_0);
 
-#line 214
-        thread array<Sphere_0, int(5)> _S54 = world_0;
+#line 224
+        thread array<Sphere_0, int(5)> _S55 = world_0;
 
-#line 214
-        float4 _S55 = ray_color_0(&_S53, &_S54, int(5), rand_seed_0);
+#line 224
+        float4 _S56 = ray_color_0(&_S54, &_S55, int(5), rand_seed_0);
+
+#line 233
+        color_3 = color_3 + _S56;
 
 #line 223
-        color_3 = color_3 + _S55;
-
-#line 213
         i_1 = i_1 + int(1);
 
-#line 213
+#line 223
     }
 
-#line 226
-    float4 _S56 = color_3 / float4(100.0) ;
+#line 236
+    float4 _S57 = color_3 / float4(100.0) ;
 
-#line 226
-    color_3 = _S56;
+#line 236
+    color_3 = _S57;
 
-    color_3.x = gamma_correct_0(_S56.x);
+    color_3.x = gamma_correct_0(_S57.x);
     color_3.y = gamma_correct_0(color_3.y);
     color_3.z = gamma_correct_0(color_3.z);
 

@@ -175,7 +175,7 @@ float4 ray_color(Ray ray, Sphere[] world, int world_size, float seed){
 }
 
 [shader("compute")]
-[numthreads(8,8,1)]
+[numthreads(32,32,1)]
 void computeMain(uint3 dispatchThreadID : SV_DispatchThreadID){
   const int world_size = 5;
 
@@ -189,25 +189,35 @@ void computeMain(uint3 dispatchThreadID : SV_DispatchThreadID){
   world[0] = {float3(0.0f, -100.5f, -1.0f), 100.0f, material_ground};
   world[1] = {float3(0.0f, 0.0f, -1.2f), 0.5f, material_center};
   world[2] = {float3(-1.0f, 0.0f, -1.0f), 0.5f, material_left};
-world[3] = {float3(-1.0f, 0.0f, -1.0f), 0.4f, material_bubble};
+  world[3] = {float3(-1.0f, 0.0f, -1.0f), 0.4f, material_bubble};
   world[4] = {float3(1.0f, 0.0f, -1.0f), 0.5f, material_right};
 
   float aspect_ratio = (float) computeUniform.w_width / (float) computeUniform.w_height;
+  float vfov = 45.0f;
+  float3 look_from = float3(-2.0, 2.0, 2.0);
+  float3 look_at = float3(0.0, 0.0, -1.0);
+  float3 vec_up = float3(0.0, 1.0, 0.0);
 
-  float viewport_height = 2.0f;
+  float3 camera_center = look_from;
+  float focal_length = length(look_from - look_at);
+  float theta = radians(vfov);
+  float h = tan(theta/2);
+  float viewport_height = 2.0f * h * focal_length;
   float viewport_width = viewport_height * aspect_ratio;
 
-  float3 camera_center = float3(0.0f, 0.0f, 0.0f);
-  float focal_length = 1.0f;
+  float3 w = normalize(look_from - look_at);
+  float3 u = normalize(cross(vec_up, w));
+  float3 v = cross(w, u);
+
   int samples_per_pixel = 100;
 
-  float3 viewport_u = float3(viewport_width, 0.0f, 0.0f);
-  float3 viewport_v = float3(0.0f, -viewport_height, 0.0f);
+  float3 viewport_u = viewport_width * u;
+  float3 viewport_v = -viewport_height * v;
 
   float3 pixel_u = viewport_u / computeUniform.w_width;
   float3 pixel_v = viewport_v / computeUniform.w_height;
 
-  float3 loc_00 = camera_center - float3(0.0f, 0.0f, focal_length) - viewport_u / 2.0f - viewport_v / 2.0f + pixel_u / 2.0f + pixel_v / 2.0f;
+  float3 loc_00 = camera_center - focal_length * w - viewport_u / 2.0f - viewport_v / 2.0f + pixel_u / 2.0f + pixel_v / 2.0f;
 
   float4 color = float4(0.0f, 0.0f, 0.0f, 0.0f);
   for(int i = 0; i < samples_per_pixel; i++){

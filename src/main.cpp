@@ -21,6 +21,7 @@ struct Context{
   SDL_GPUComputePipeline* computePipeline;
   SDL_GPUTexture* computeRenderTexture;
   ComputeUniform computeUniformData;
+  Uint64 lastFrameTime;
 };
 Context context;
 
@@ -47,6 +48,7 @@ int contextInit(Context* contextRef){
   SDL_ClaimWindowForGPUDevice(contextRef->device, contextRef->window);
 
   contextRef->basePath = std::string(SDL_GetBasePath());
+  contextRef->lastFrameTime = SDL_GetTicks();
   return 0;
 }
 
@@ -144,12 +146,16 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
 }
 
 SDL_AppResult SDL_AppIterate(void* appstate){
+  Uint64 currentTime = SDL_GetTicks();
+  Uint64 frameRate = 1000 / (float) (currentTime - context.lastFrameTime);
+  context.lastFrameTime = currentTime;
+
   ImGui_ImplSDLGPU3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
 
   ImGui::Begin("Controls");
-  ImGui::Text("words words words");
+  ImGui::Text("FPS: %llu", frameRate);
   ImGui::End();
 
   ImGui::Render();
