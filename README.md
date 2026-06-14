@@ -7,14 +7,11 @@ An open-source raytracing engine built with SDL3 GPU.
 
 ## Why
 
-I really like graphics programming, and wanted to write my own raytracer and create pretty scenarios with it.
-That's the main reason I created this project.
+I really enjoy graphics programming, and I wanted to finally create my own raytracer and create pretty renders
+with it.
 
-In addition to that, while I don't think the world needs yet another raytracing tutorial, I wanted to make one anyways!
-
-A lot of the popular raytracing tutorials online use no graphics API at all, and instead make you use your CPU
-to generate image files. This approach is perfectly fine for a tutorial. However, I using something like
-SDL allows you to write interactive programs, which I think is more fun!
+I decided to use SDL_GPU over other APIs because I think it strikes the perfect balance of being moder modern than
+OpenGL while being less verbose than Vulkan.
 
 ### Why SDL3?
 
@@ -27,7 +24,7 @@ writing cross-platform graphics code is still a bit of a challenge:
 
 I think that, in situations where Vulkan's lower-level features aren't required, SDL3 is probably the best option
 for cross-platform graphics applications:
-- The new SDL GPU API provides a nice abstraction layer for apps to talk to modern graphics hardware;
+- The new SDL_GPU API provides a nice abstraction layer for apps to talk to modern graphics hardware;
 - It's supported on all major operating systems and consoles;
 - It's easy to learn and set up.
 
@@ -60,12 +57,6 @@ slangc shaders.slang -entry computeMain -stage compute -target spirv -o spirv/co
 
 slangc shaders.slang -entry computeMain -stage vertex -target metal -o metal/compute.metal
 ```
-
-## Chapters
-
-If you want to build your own raytracing engine, I wrote X chapters explaining how I created this one:
-
-**[Chapter 1](#)** - Project set up
 
 ## Contributing
 
