@@ -75,6 +75,17 @@ else()
   )
 endif()
 
+# GLM
+find_package(glm QUIET)
+if(NOT glm_FOUND)
+  FetchContent_Declare(
+    glm
+    GIT_REPOSITORY	https://github.com/g-truc/glm.git
+    GIT_TAG 	1.0.3
+  )
+  FetchContent_MakeAvailable(glm)
+endif()
+
 add_executable(simple_raytracer
   src/main.cpp
 )
@@ -84,12 +95,14 @@ if(NOT SDL3_FOUND)
     PRIVATE
       SDL3::SDL3-static
       imgui_lib
+      glm::glm-header-only
   )
 else()
   target_link_libraries(simple_raytracer
     PRIVATE
       SDL3::SDL3
       imgui_lib
+      glm::glm-header-only
   )
 endif()
 
