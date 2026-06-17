@@ -36,6 +36,13 @@ struct Sphere{
 };
 layout(binding = 0, set = 0) StructuredBuffer<Sphere> spheres;
 
+struct HitInfo{
+  float t;
+  float3 p;
+  float3 normal;
+  bool front_face;
+};
+
 struct Ray{
   float3 origin;
   float3 direction;
@@ -43,30 +50,98 @@ struct Ray{
 
 float rand(float seed)
 {
-    return frac(sin(seed * 12.98 + 78.23) * 43.54);
+    return frac(sin(seed * 12.98f + 78.23f) * 43879.54f);
 }
 
-bool hit_sphere(Sphere sphere, Ray ray){
+float rand_range(float seed, float r_min, float r_max){
+    return r_min + rand(seed) * (r_max - r_min);
+}
+
+float3 rand_unit_vector(float seed){
+    float3 v = float3(
+      rand_range(seed * 3.49f, -1.0f, 1.0f),
+      rand_range(seed * 5.01f, -1.0f, 1.0f),
+      rand_range(seed * 1.88f, -1.0f, 1.0f)
+    );
+    for(int i = 0; i < 50; i++){
+      if(length(v) < 1.0f){
+        return normalize(v);
+      }
+      v = float3(
+        rand_range(seed * 3.49f + (i+1), -1.0f, 1.0f),
+        rand_range(seed * 5.01f + (i+1),-1.0f, 1.0f),
+        rand_range(seed * 1.88f + (i+1), -1.0f, 1.0f)
+      );
+    }
+    return float3(0.0f, 0.0f, 0.0f);
+}
+
+float gamma_correct(float v){
+  if(v >= 0.0f){
+    return sqrt(v);
+  }
+  return v;
+}
+
+bool hit_sphere(Sphere sphere, Ray ray, out HitInfo info, float t_min, float t_max){
   float3 oc = sphere.center.xyz - ray.origin;
   float a = dot(ray.direction, ray.direction);
   float b = -2.0f * dot(ray.direction, oc);
   float c = dot(oc, oc) - sphere.radius * sphere.radius;
   float discriminant = b * b - 4 * a * c;
-  return discriminant >= 0;
-}
-
-float4 ray_color(Ray ray){
-  float3 n = normalize(ray.direction);
   
-  for(int i = 0; i < u_data.sphere_count; i++){
-    Sphere s = spheres[i];
-    if(hit_sphere(s, ray)){
-      return float4(1.0f, 0.0f, 0.0f, 1.0f);
+  info = {};
+
+  if(discriminant <= 0.0f){
+    return false;
+  } 
+
+  float t = (-b - sqrt(discriminant)) / (2 * a);
+  if(t <= t_min || t_max <= t){
+    t = (-b + sqrt(discriminant)) / (2 * a);
+    if(t <= t_min || t_max <= t){
+      return false;
     }
   }
 
-  float a = 0.5f * (n.y + 1.0f);
-  return (1-a) * float4(1.0f, 1.0f, 1.0f, 1.0f) + a * float4(0.5f, 0.7f, 1.0f, 1.0f);
+  info.t = t;
+  info.p = ray.origin + info.t * ray.direction;
+  float3 outwards_normal = (info.p - sphere.center.xyz) / sphere.radius;
+  info.front_face = dot(ray.direction, outwards_normal) <= 0.0f;
+  info.normal = info.front_face ? outwards_normal : - outwards_normal;
+
+  return true;
+}
+
+float4 ray_color(Ray ray, float seed){
+  float4 color = float4(1.0f, 1.0f, 1.0f, 1.0f);
+
+  for(int bounces = 0; bounces < 100; bounces++){
+    HitInfo info;
+    info.t = 10000.0f;
+    bool hit_anything = false;
+
+    for(int i = 0; i < u_data.sphere_count; i++){
+      HitInfo tmp;
+      if(hit_sphere(spheres[i], ray, tmp, 0.001f, info.t)){
+        info = tmp;
+        hit_anything = true;
+      }
+    }
+
+    if(hit_anything){
+      color *= float4(0.7f, 0.7f, 0.7f, 1.0f);
+      float3 direction = info.normal + rand_unit_vector(seed + bounces * 7.23f);
+      ray = {info.p, direction};
+    } else {
+      float3 n = normalize(ray.direction);
+      float a = 0.5f * (n.y + 1.0f);
+      color *= (1 - a) * float4(1.0f, 1.0f, 1.0f, 1.0f) + a * float4(0.5f, 0.7f, 1.0f, 1.0f);
+      break;
+    }
+  }
+ 
+  return color;
 }
 
 [shader("compute")]
@@ -84,9 +159,18 @@ void computeMain(uint3 thread_id: SV_DispatchThreadID){
     float y = (float) thread_id.y + (rand(u_data.r_seed + 0.967 * i * 2.118f + thread_id.y + 0.174f) - 0.5f);
     float3 pixel_center = pixel00 + x * pixel_u + y * pixel_v;
     Ray ray = {camera_position, pixel_center - camera_position};
-    color += ray_color(ray);
+    color += ray_color(ray, u_data.r_seed + thread_id.x * 1.21f + thread_id.y * 0.45f + i * 7.77f);
   }
 
   color /= (float) u_data.samples_per_pixel;
+
+  color.r = gamma_correct(color.r); 
+  color.g = gamma_correct(color.g); 
+  color.b = gamma_correct(color.b); 
+
+  color.r = clamp(color.r, 0.0f, 1.0f);
+  color.g = clamp(color.g, 0.0f, 1.0f);
+  color.b = clamp(color.b, 0.0f, 1.0f);
+
   out_image[int2(thread_id.xy)] = color;
 }

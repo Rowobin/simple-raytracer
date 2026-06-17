@@ -103,8 +103,11 @@ int contextInit(){
   context.u_data.samples_per_pixel = 20;
 
   Sphere spheres[] = {
+    { {0.0f, -100.5f, -1.0f, 0.0f}, 100.0f},
     { {0.0f, 0.0f, -1.0f, 0.0f}, 0.5f},
-    { {-2.0f, 0.0f, -2.0f, 0.0f}, 0.5f}
+    { {-2.0f, 0.0f, -2.0f, 0.0f}, 0.5f},
+    { {2.0f, 0.0f, -2.0f, 0.0f}, 0.5f},
+    { {0.0f, 0.0f, -4.0f, 0.0f}, 0.5f}
   };
   context.u_data.sphere_count = sizeof(spheres) / sizeof(Sphere);
   Uint32 buffer_size = sizeof(spheres);
@@ -309,6 +312,7 @@ SDL_AppResult SDL_AppIterate(void* appstate){
       updateUniformData();
     }
   }
+  ImGui::SeparatorText("Samples per pixel");
   ImGui::DragInt("##samples", &context.u_data.samples_per_pixel, 1, 1, 50);
   ImGui::End();
 
