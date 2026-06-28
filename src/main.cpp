@@ -15,10 +15,27 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
+enum MaterialType{
+  LAMBERTIAN,
+  METAL,
+  DIELECTRIC
+};
+
+struct Material{
+  MaterialType Type;
+  float pad1[3];
+
+  glm::vec4 albedo;
+  float fuzz;
+  float refraction_index;
+  float pad2[2];
+};
+
 struct Sphere{
   glm::vec4 center;
   float radius;
   float pad[3];
+  Material material;
 };
 
 struct UniformData{
@@ -30,11 +47,13 @@ struct UniformData{
   glm::vec4 camera_position;
   glm::vec4 camera_look_at;
   glm::vec4 up;
-  float focal_length;
+  float defocus_angle;
+  float focus_dist;
+  float fov;
   
   float viewport_h;
   float viewport_w;
-  float pad2;
+  float pad2[3];
   
   glm::vec4 viewport_u;
   glm::vec4 viewport_v;
@@ -45,11 +64,18 @@ struct UniformData{
   glm::vec4 v;
   glm::vec4 w;
 
+  glm::vec4 defocus_disk_u;
+  glm::vec4 defocus_disk_v;
+
   glm::vec4 pixel00;
 
   int sphere_count;
   int samples_per_pixel;
-  float pad3;
+  float t_min;
+  float t_max;
+
+  int max_bounces;
+  float pad3[3];
 };
 
 struct Context{
@@ -88,7 +114,7 @@ int contextInit(){
   if(!context.device){
     std::cerr << "SDL_CreateGPUDevice ERROR - " << SDL_GetError() << std::endl;
     return -1;
-  }
+ }
   SDL_ClaimWindowForGPUDevice(context.device, context.window);
 
   context.base_path = std::string(SDL_GetBasePath());
@@ -96,19 +122,38 @@ int contextInit(){
   context.last_fps_update = 0;
   context.frame_rate = 0;
 
-  context.u_data.camera_position = {0.0f, 0.0f, 0.0f, 0.0f};
+  context.u_data.camera_position = {5.0f, 5.0f, 5.0f, 0.0f};
   context.u_data.camera_look_at = {0.0f, 0.0f, -1.0f, 0.0f};
   context.u_data.up = {0.0f, 1.0f, 0.0f, 0.0f};
-  context.u_data.focal_length = 1.0f;
+  context.u_data.defocus_angle = 0.0f;
+  context.u_data.focus_dist = 2.0f;
+  context.u_data.fov = 75.0f;
   context.u_data.samples_per_pixel = 20;
+  context.u_data.t_min = 0.0001f;
+  context.u_data.t_max = 100.0f;
+  context.u_data.max_bounces = 20;
 
-  Sphere spheres[] = {
-    { {0.0f, -100.5f, -1.0f, 0.0f}, 100.0f},
-    { {0.0f, 0.0f, -1.0f, 0.0f}, 0.5f},
-    { {-2.0f, 0.0f, -2.0f, 0.0f}, 0.5f},
-    { {2.0f, 0.0f, -2.0f, 0.0f}, 0.5f},
-    { {0.0f, 0.0f, -4.0f, 0.0f}, 0.5f}
+  Material materials[] = {
+      { LAMBERTIAN, {}, {0.8f, 0.0f, 0.0f, 0.0f}, 0.0f, 0.0f, {} },      // red_lambert
+      { LAMBERTIAN, {}, {0.0f, 0.0f, 0.8f, 0.0f}, 0.0f, 0.0f, {} },      // blue_lambert
+      { LAMBERTIAN, {}, {0.0f, 0.3f, 0.0f, 0.0f}, 0.0f, 0.0f, {} },      // green_lambert 
+      { METAL,      {}, {0.9f, 0.9f, 0.9f, 0.0f}, 0.0f, 0.0f, {} },      // white_metal
+      { METAL,      {}, {0.1f, 0.1f, 0.7f, 0.0f}, 0.2f, 0.0f, {} },      // blue metal
+      { DIELECTRIC, {}, {1.0f, 1.0f, 1.0f, 0.0f}, 0.0f, 1.0f / 1.5f, {} }, // glass
   };
+  Material floor = { LAMBERTIAN, {}, {0.2f, 0.6f, 0.1f, 0.0f}, 0.0f, 0.0f, {} };
+
+  Sphere spheres[80];
+  spheres[0] = { {0.0f, -800.5f, 0.0f, 0.0f}, 800.0f, {}, floor };
+
+  for(int i = 1; i < 80; i++){
+    Sphere s;
+    s.radius = 0.3f;
+    s.center = {std::rand() % 20 - 10.0f, s.radius - 0.5f, std::rand() % 20 - 10.0f, 0.0f};
+    s.material = materials[i % 6];
+    spheres[i] = s;
+  }
+
   context.u_data.sphere_count = sizeof(spheres) / sizeof(Sphere);
   Uint32 buffer_size = sizeof(spheres);
 
@@ -201,7 +246,7 @@ void updateUniformData(){
   context.u_data.u = glm::vec4(u, 0.0f);
   context.u_data.v = glm::vec4(v, 0.0f);
 
-  context.u_data.viewport_w = 4.0f;
+  context.u_data.viewport_w = 4.0f * glm::tan(glm::radians(context.u_data.fov / 2.0f));
   context.u_data.viewport_h = context.u_data.viewport_w / context.u_data.aspect_ratio;
 
   glm::vec3 viewport_u = context.u_data.viewport_w * u;
@@ -216,11 +261,15 @@ void updateUniformData(){
   context.u_data.pixel_u = glm::vec4(pixel_u, 0.0f);
   context.u_data.pixel_v = glm::vec4(pixel_v, 0.0f);
 
-  glm::vec3 pixel00 = camera_position + context.u_data.focal_length * w;
+  glm::vec3 pixel00 = camera_position + context.u_data.focus_dist * w;
   pixel00 -= (viewport_u * 0.5f + viewport_v * 0.5f);
   pixel00 += (pixel_u * 0.5f + pixel_v * 0.5f);
 
   context.u_data.pixel00 = glm::vec4(pixel00, 0.0f);
+
+  float defocus_radius = context.u_data.focus_dist * glm::tan(glm::radians(context.u_data.defocus_angle / 2.0f));
+  context.u_data.defocus_disk_u = glm::vec4(u * defocus_radius, 0.0f);
+  context.u_data.defocus_disk_v = glm::vec4(v * defocus_radius, 0.0f);
 }
 
 SDL_GPUTexture* createScreenSizeRenderTexture(){
@@ -243,11 +292,11 @@ SDL_GPUTexture* createScreenSizeRenderTexture(){
 }
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){ 
+  std::srand(std::time({}));
+
   if(contextInit() != 0){
     return SDL_APP_FAILURE;
   }
-  
-  std::srand(std::time({}));
 
 #ifdef __APPLE__
   context.compute_pipeline = loadComputePipeline("shaders/metal/compute.metal", "computeMain", SDL_GPU_SHADERFORMAT_MSL,
@@ -298,7 +347,7 @@ SDL_AppResult SDL_AppIterate(void* appstate){
 
   ImGui::Begin("Controls");
   ImGui::Text("FPS: %llu", context.frame_rate);
-  if(ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)){
+  if(ImGui::CollapsingHeader("Camera")){
     ImGui::SeparatorText("Position");
     if(ImGui::DragFloat3("##pos", &context.u_data.camera_position[0], 0.1f)){
       updateUniformData();
@@ -307,11 +356,26 @@ SDL_AppResult SDL_AppIterate(void* appstate){
     if(ImGui::DragFloat3("###look", &context.u_data.camera_look_at[0], 0.1f)){
       updateUniformData();
     }
-    ImGui::SeparatorText("Focal length");
-    if(ImGui::DragFloat("##focal", &context.u_data.focal_length, 0.1f, 0.1f, 5.0f)){
+    ImGui::SeparatorText("FOV");
+    if(ImGui::DragFloat("###fov", &context.u_data.fov, 1.0f, 10.0f, 90.0f)){
       updateUniformData();
     }
+    ImGui::SeparatorText("Focus distance");
+    if(ImGui::DragFloat("##focusdist", &context.u_data.focus_dist, 0.5f, 0.5f, 50.0f)){
+      updateUniformData();
+    }
+    ImGui::SeparatorText("Defocus angle");
+    if(ImGui::DragFloat("##defocus", &context.u_data.defocus_angle, 0.5f, 0.0f, 90.0f)){
+      updateUniformData();
+    }
+
+    ImGui::SeparatorText("Min distance");
+    ImGui::DragFloat("##tmin", &context.u_data.t_min, 1.0f, 0.0001f, context.u_data.t_max);
+    ImGui::SeparatorText("Max distance");
+    ImGui::DragFloat("##tmax", &context.u_data.t_max, 1.0f, context.u_data.t_min, 100000.0f);
   }
+  ImGui::SeparatorText("Max bounces");
+  ImGui::DragInt("##maxbounces", &context.u_data.max_bounces, 1, 1, 100);
   ImGui::SeparatorText("Samples per pixel");
   ImGui::DragInt("##samples", &context.u_data.samples_per_pixel, 1, 1, 50);
   ImGui::End();
