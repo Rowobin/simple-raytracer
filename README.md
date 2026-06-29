@@ -5,6 +5,9 @@
 # simple-raytracer
 An open-source raytracing engine built with SDL_GPU.
 
+## Version 1.0
+<img width="800" height="450" alt="image" src="https://github.com/user-attachments/assets/d408f9be-e0d4-4e1f-855c-d47903db727c" />
+
 ## Why
 I really enjoy graphics programming, and I wanted to finally create my own raytracer and create cool renders with it.
 ### Why SDL3?
@@ -18,8 +21,15 @@ I think that, in situations where Vulkan's lower-level features aren't required,
 - The new SDL_GPU API provides a nice abstraction layer for apps to talk to modern graphics hardware;
 - It's supported on all major operating systems and consoles;
 - It's easy to learn and set up.
+
 ## Features
-To-Do
+
+## Version 1.0
+- Sphere intersection
+- 3 physically based materials (lambert, metal and dieletric)
+- Defocus blur
+- An ImGui window to control camera position, bounces/samples per ray, min/max ray distance, etc.
+
 ## How to build
 ### Dependencies
 I tried to keep dependencies on this project to a minimum. Here's what you need to have on your machine in other to compile simple-raytracer:
@@ -30,7 +40,7 @@ I tried to keep dependencies on this project to a minimum. Here's what you need 
 
 **Note 1:** If SDL3 is not installed in your machine, CMake will fetch it from github. ImGui and GML are always fetched from github.
 
-**Note 2:** If you don't have slangc installed on your machine, I would recommend installing the [VulkanSDK](https://vulkan.lunarg.com/sdk/home.
+**Note 2:** If you don't have slangc installed on your machine, I would recommend installing the ![VulkanSDK](https://vulkan.lunarg.com/sdk/home).
 
 ### Building
 Once all dependencies are installed, run these commands on your terminal:
