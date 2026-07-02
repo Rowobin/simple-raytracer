@@ -128,10 +128,10 @@ int contextInit(){
   context.u_data.defocus_angle = 0.0f;
   context.u_data.focus_dist = 2.0f;
   context.u_data.fov = 75.0f;
-  context.u_data.samples_per_pixel = 20;
+  context.u_data.samples_per_pixel = 4;
   context.u_data.t_min = 0.0001f;
   context.u_data.t_max = 100.0f;
-  context.u_data.max_bounces = 20;
+  context.u_data.max_bounces = 8;
 
   Material materials[] = {
       { LAMBERTIAN, {}, {0.8f, 0.0f, 0.0f, 0.0f}, 0.0f, 0.0f, {} },      // red_lambert
@@ -148,8 +148,8 @@ int contextInit(){
 
   for(int i = 1; i < 80; i++){
     Sphere s;
-    s.radius = 0.3f;
-    s.center = {std::rand() % 20 - 10.0f, s.radius - 0.5f, std::rand() % 20 - 10.0f, 0.0f};
+    s.radius = 0.5f;
+    s.center = {std::rand() % 40 - 20.0f, s.radius - 0.5f, std::rand() % 40 - 20.0f, 0.0f};
     s.material = materials[i % 6];
     spheres[i] = s;
   }
@@ -357,7 +357,7 @@ SDL_AppResult SDL_AppIterate(void* appstate){
       updateUniformData();
     }
     ImGui::SeparatorText("FOV");
-    if(ImGui::DragFloat("###fov", &context.u_data.fov, 1.0f, 10.0f, 90.0f)){
+    if(ImGui::DragFloat("###fov", &context.u_data.fov, 1.0f, 10.0f, 180.0f)){
       updateUniformData();
     }
     ImGui::SeparatorText("Focus distance");
