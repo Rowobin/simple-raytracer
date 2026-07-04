@@ -3,6 +3,7 @@
 #include <ctime>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
 
 #define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL.h>
@@ -14,6 +15,20 @@
 
 #include "glm/glm.hpp"
 #include "glm/gtc/type_ptr.hpp"
+
+struct BoundingBox{
+  glm::vec4 x;
+  glm::vec4 y;
+  glm::vec4 z;
+};
+
+struct BVHNode{
+  BoundingBox bbox;
+  int left;
+  int right;
+  int count;
+  float pad;
+};
 
 enum MaterialType{
   LAMBERTIAN,
@@ -75,7 +90,9 @@ struct UniformData{
   float t_max;
 
   int max_bounces;
-  float pad3[3];
+  int bvh_node_count;
+  int use_bvh;
+  float pad3;
 };
 
 struct Context{
@@ -88,12 +105,129 @@ struct Context{
   SDL_GPUTexture* compute_render_texture;
   UniformData u_data;
   SDL_GPUBuffer* compute_sphere_buffer;
+  SDL_GPUBuffer* compute_bvh_buffer;
 
   Uint64 frame_counter;
   Uint64 last_fps_update;
   Uint64 frame_rate;
 };
 Context context;
+
+bool sphere_sort_x(std::pair<int, Sphere> a, std::pair<int, Sphere> b){
+  return a.second.center.x < b.second.center.x;
+}
+
+bool sphere_sort_y(std::pair<int, Sphere> a, std::pair<int, Sphere> b){
+  return a.second.center.y < b.second.center.y;
+}
+
+bool sphere_sort_z(std::pair<int, Sphere> a, std::pair<int, Sphere> b){
+  return a.second.center.z < b.second.center.z;
+}
+
+int createBVHRecursive(std::vector<BVHNode>& bvh_list, std::vector<std::pair<int, Sphere>>& spheres, int start, int end){
+  BVHNode bvh_node;
+  bvh_node.left = -1;
+  bvh_node.right = -1;
+  BoundingBox bbox = {
+    {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), 0.0f, 0.0f},
+    {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), 0.0f, 0.0f},
+    {std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity(), 0.0f, 0.0f},
+  };
+
+  for(int i = start; i < end; i++){
+    Sphere sphere = spheres[i].second;
+
+    BoundingBox bbox_sphere;
+    bbox_sphere.x = { sphere.center.x - sphere.radius, sphere.center.x + sphere.radius, 0.0f, 0.0f};
+    bbox_sphere.y = { sphere.center.y - sphere.radius, sphere.center.y + sphere.radius, 0.0f, 0.0f};
+    bbox_sphere.z = { sphere.center.z - sphere.radius, sphere.center.z + sphere.radius, 0.0f, 0.0f};
+
+    bbox.x = {glm::min(bbox.x[0], bbox_sphere.x[0]), glm::max(bbox.x[1], bbox_sphere.x[1]), 0.0f, 0.0f};
+    bbox.y = {glm::min(bbox.y[0], bbox_sphere.y[0]), glm::max(bbox.y[1], bbox_sphere.y[1]), 0.0f, 0.0f};
+    bbox.z = {glm::min(bbox.z[0], bbox_sphere.z[0]), glm::max(bbox.z[1], bbox_sphere.z[1]), 0.0f, 0.0f};
+  }
+
+  if(end - start == 1){
+    bvh_node.left = spheres[start].first; 
+  } else {
+    float x_length = bbox.x[1] - bbox.x[0];
+    float y_length = bbox.y[1] - bbox.y[0];
+    float z_length = bbox.z[1] - bbox.z[0];
+
+    if(x_length >= y_length && x_length >= z_length){
+      std::sort(spheres.begin() + start, spheres.begin() + end, sphere_sort_x); 
+    } else if (y_length >= z_length){
+      std::sort(spheres.begin() + start, spheres.begin() + end, sphere_sort_y); 
+    } else {
+      std::sort(spheres.begin() + start, spheres.begin() + end, sphere_sort_z); 
+    }
+
+    int half = (end - start) / 2;
+    bvh_node.left = createBVHRecursive(bvh_list, spheres, start, start + half);
+    bvh_node.right = createBVHRecursive(bvh_list, spheres, start + half, end);
+  }
+
+  bvh_node.bbox = bbox;
+  bvh_node.count = end - start;
+  bvh_list.push_back(bvh_node);
+  return bvh_list.size() - 1;
+}
+
+void createBVH(std::vector<BVHNode>& bvh_list, std::vector<Sphere>& spheres){
+  std::vector<std::pair<int, Sphere>> sphere_pairs;
+  sphere_pairs.reserve(spheres.size());
+
+  for(int i = 0; i < spheres.size(); i++){
+    sphere_pairs.push_back(std::pair<int, Sphere>(i, spheres[i]));
+  }
+
+  bvh_list.clear();
+  bvh_list.reserve(spheres.size() * 2);
+
+  createBVHRecursive(bvh_list, sphere_pairs, 0, spheres.size());
+}
+
+int transferDataToGPU(void* cpu_data, Uint32 data_size, SDL_GPUBuffer** gpu_buffer){
+  SDL_GPUBufferCreateInfo buffer_info = {
+    .usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ,
+    .size = data_size,
+  };
+
+  *gpu_buffer = SDL_CreateGPUBuffer(context.device, &buffer_info);
+  if(!gpu_buffer){
+    std::cerr << "SDL_CreateGPUBuffer ERROR - " << SDL_GetError() << std::endl;
+    return -1;
+  }
+
+  SDL_GPUTransferBufferCreateInfo transfer_info = {
+    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    .size = data_size 
+  };
+  SDL_GPUTransferBuffer* transfer_buffer = SDL_CreateGPUTransferBuffer(context.device, &transfer_info);
+  if(!transfer_buffer){
+    std::cerr << "SDL_CreateGPUTransferBuffer ERROR - " << SDL_GetError() << std::endl;
+    return -1;
+  }
+
+  void* map = SDL_MapGPUTransferBuffer(context.device, transfer_buffer, false);
+  memcpy(map, cpu_data, data_size);
+  SDL_UnmapGPUTransferBuffer(context.device, transfer_buffer);
+
+  SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(context.device);
+
+  SDL_GPUTransferBufferLocation transfer_location = {.transfer_buffer = transfer_buffer, .offset = 0};
+  SDL_GPUBufferRegion buffer_region = {.buffer = *gpu_buffer, .offset = 0, .size = data_size};
+  SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(command_buffer);
+  SDL_UploadToGPUBuffer(copy_pass, &transfer_location, &buffer_region, false);
+  SDL_EndGPUCopyPass(copy_pass);
+
+  SDL_SubmitGPUCommandBuffer(command_buffer);
+
+  SDL_ReleaseGPUTransferBuffer(context.device, transfer_buffer);
+
+  return 0;
+}
 
 int contextInit(){
   context.window = SDL_CreateWindow("Simple Raytracer", 800, 450, 0);
@@ -132,6 +266,7 @@ int contextInit(){
   context.u_data.t_min = 0.0001f;
   context.u_data.t_max = 100.0f;
   context.u_data.max_bounces = 8;
+  context.u_data.use_bvh = 1;
 
   Material materials[] = {
       { LAMBERTIAN, {}, {0.8f, 0.0f, 0.0f, 0.0f}, 0.0f, 0.0f, {} },      // red_lambert
@@ -143,55 +278,30 @@ int contextInit(){
   };
   Material floor = { LAMBERTIAN, {}, {0.2f, 0.6f, 0.1f, 0.0f}, 0.0f, 0.0f, {} };
 
-  Sphere spheres[80];
-  spheres[0] = { {0.0f, -800.5f, 0.0f, 0.0f}, 800.0f, {}, floor };
-
-  for(int i = 1; i < 80; i++){
+  std::vector<Sphere> spheres;
+  spheres.push_back({ {0.0f, -800.5f, 0.0f, 0.0f}, 800.0f, {}, floor });
+  for(int i = 1; i < 500; i++){
     Sphere s;
     s.radius = 0.5f;
-    s.center = {std::rand() % 40 - 20.0f, s.radius - 0.5f, std::rand() % 40 - 20.0f, 0.0f};
+    s.center = {std::rand() % 100 - 50.0f, s.radius - 0.5f, std::rand() % 100 - 50.0f, 0.0f};
     s.material = materials[i % 6];
-    spheres[i] = s;
+    spheres.push_back(s);
+  }
+  context.u_data.sphere_count = spheres.size();
+
+  std::vector<BVHNode> bvh;
+  createBVH(bvh, spheres);
+  context.u_data.bvh_node_count = bvh.size();
+
+  if(transferDataToGPU(spheres.data(), spheres.size() * sizeof(Sphere), &context.compute_sphere_buffer) != 0){
+    std::cerr << "transferDataToGPU ERROR - compute_sphere_buffer" << std::endl;
+    return -1; 
   }
 
-  context.u_data.sphere_count = sizeof(spheres) / sizeof(Sphere);
-  Uint32 buffer_size = sizeof(spheres);
-
-  SDL_GPUBufferCreateInfo buffer_info = {
-    .usage = SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ,
-    .size = buffer_size,
-  };
-  context.compute_sphere_buffer = SDL_CreateGPUBuffer(context.device, &buffer_info);
-  if(!context.compute_sphere_buffer){
-    std::cerr << "SDL_CreateGPUBuffer ERROR - " << SDL_GetError() << std::endl;
-    return -1;
+  if(transferDataToGPU(bvh.data(), bvh.size() * sizeof(BVHNode), &context.compute_bvh_buffer) != 0){
+    std::cerr << "transferDataToGPU ERROR - compute_bvh_buffer" << std::endl;
+    return -1; 
   }
-
-  SDL_GPUTransferBufferCreateInfo transfer_info = {
-    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-    .size = buffer_size
-  };
-  SDL_GPUTransferBuffer* transfer_buffer = SDL_CreateGPUTransferBuffer(context.device, &transfer_info);
-  if(!transfer_buffer){
-    std::cerr << "SDL_CreateGPUTransferBuffer ERROR - " << SDL_GetError() << std::endl;
-    return -1;
-  }
-
-  void* map = SDL_MapGPUTransferBuffer(context.device, transfer_buffer, false);
-  memcpy(map, spheres, buffer_size);
-  SDL_UnmapGPUTransferBuffer(context.device, transfer_buffer);
-
-  SDL_GPUCommandBuffer* command_buffer = SDL_AcquireGPUCommandBuffer(context.device);
-
-  SDL_GPUTransferBufferLocation transfer_location = {.transfer_buffer = transfer_buffer, .offset = 0};
-  SDL_GPUBufferRegion buffer_region = {.buffer = context.compute_sphere_buffer, .offset = 0, .size = buffer_size};
-  SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(command_buffer);
-  SDL_UploadToGPUBuffer(copy_pass, &transfer_location, &buffer_region, false);
-  SDL_EndGPUCopyPass(copy_pass);
-
-  SDL_SubmitGPUCommandBuffer(command_buffer);
-
-  SDL_ReleaseGPUTransferBuffer(context.device, transfer_buffer);
 
   return 0;
 }
@@ -300,10 +410,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv){
 
 #ifdef __APPLE__
   context.compute_pipeline = loadComputePipeline("shaders/metal/compute.metal", "computeMain", SDL_GPU_SHADERFORMAT_MSL,
-      0, 0, 1, 1, 0, 1, 8, 8, 1);
+      0, 0, 2, 1, 0, 1, 8, 8, 1);
 #else
   context.compute_pipeline = loadComputePipeline("shaders/spirv/compute.spv", "main", SDL_GPU_SHADERFORMAT_SPIRV, 
-      0, 0, 1, 1, 0, 1, 8, 8, 1);
+      0, 0, 2, 1, 0, 1, 8, 8, 1);
 #endif
 
   if(!context.compute_pipeline){
@@ -368,7 +478,6 @@ SDL_AppResult SDL_AppIterate(void* appstate){
     if(ImGui::DragFloat("##defocus", &context.u_data.defocus_angle, 0.5f, 0.0f, 90.0f)){
       updateUniformData();
     }
-
     ImGui::SeparatorText("Min distance");
     ImGui::DragFloat("##tmin", &context.u_data.t_min, 1.0f, 0.0001f, context.u_data.t_max);
     ImGui::SeparatorText("Max distance");
@@ -378,6 +487,8 @@ SDL_AppResult SDL_AppIterate(void* appstate){
   ImGui::DragInt("##maxbounces", &context.u_data.max_bounces, 1, 1, 100);
   ImGui::SeparatorText("Samples per pixel");
   ImGui::DragInt("##samples", &context.u_data.samples_per_pixel, 1, 1, 50);
+  ImGui::SeparatorText("Use BVH");
+  ImGui::DragInt("##usebvh", &context.u_data.use_bvh, 1, 0, 1);
   ImGui::End();
 
   ImGui::Render();
@@ -421,8 +532,10 @@ SDL_AppResult SDL_AppIterate(void* appstate){
   }
 
   SDL_BindGPUComputePipeline(compute_pass, context.compute_pipeline);
-  SDL_GPUBuffer* buffers[] = {context.compute_sphere_buffer};
-  SDL_BindGPUComputeStorageBuffers(compute_pass, 0, buffers, 1);
+
+  SDL_GPUBuffer* buffers[] = {context.compute_sphere_buffer, context.compute_bvh_buffer};
+  SDL_BindGPUComputeStorageBuffers(compute_pass, 0, buffers, 2);
+
   SDL_PushGPUComputeUniformData(command_buffer, 0, &context.u_data, sizeof(context.u_data));
   SDL_DispatchGPUCompute(compute_pass, width / 8, height / 8, 1);
 

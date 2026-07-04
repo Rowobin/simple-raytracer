@@ -9,7 +9,6 @@ struct UniformData{
   float4 camera_position;
   float4 camera_look_at;
   float4 up;
-  float focal_length;
   float defocus_angle;
   float focus_dist;
   float fov;
@@ -37,6 +36,8 @@ struct UniformData{
   float t_max;
 
   int max_bounces;
+  int bvh_node_count;
+  int use_bvh;
 };
 layout(binding = 0, set = 2) ConstantBuffer<UniformData> u_data; 
 
@@ -59,6 +60,20 @@ struct Sphere{
   Material material;
 };
 layout(binding = 0, set = 0) StructuredBuffer<Sphere> spheres;
+
+struct BoundingBox{
+  float4 x;
+  float4 y;
+  float4 z;
+};
+
+struct BVHNode{
+  BoundingBox bbox;
+  int left;
+  int right;
+  int count;
+};
+layout(binding = 1, set = 0) StructuredBuffer<BVHNode> bvh_list;
 
 struct HitInfo{
   float t;
@@ -127,6 +142,45 @@ float gamma_correct(float v){
   return v;
 }
 
+float4 get_box_axis(BoundingBox b, int axis){
+  if(axis == 0) return b.x;
+  if(axis == 1) return b.y;
+  return b.z;
+}
+
+bool hit_bounding_box(BoundingBox box, Ray ray, float t_min, float t_max){
+  float2 hit_interval = { t_min, t_max };
+
+  for(int i = 0; i < 3; i++){
+    float4 box_axis = get_box_axis(box, i);
+
+    if(abs(ray.direction[i]) < 0.000001f){
+      if(ray.origin[i] < box_axis[0] || ray.origin[i] > box_axis[1]){
+        return false;
+      }
+      continue;
+    }
+
+    float t0 = (box_axis[0] - ray.origin[i]) / ray.direction[i];
+    float t1 = (box_axis[1] - ray.origin[i]) / ray.direction[i];
+
+    if(t0 > t1){
+      float tmp = t0;
+      t0 = t1;
+      t1 = tmp;
+    }
+
+    hit_interval[0] = max(hit_interval[0], t0);
+    hit_interval[1] = min(hit_interval[1], t1);
+
+    if(hit_interval[0] > hit_interval[1]){
+      return false;
+    }
+  }
+
+  return true;
+}
+
 bool hit_sphere(Sphere sphere, Ray ray, out HitInfo info, float t_min, float t_max){
   float3 oc = sphere.center.xyz - ray.origin;
   float a = dot(ray.direction, ray.direction);
@@ -158,19 +212,65 @@ bool hit_sphere(Sphere sphere, Ray ray, out HitInfo info, float t_min, float t_m
   return true;
 }
 
+bool hit_bvh(Ray ray, out HitInfo info, float t_min, float t_max){
+  info = {};
+  info.t = t_max;
+
+  bool hit_anything = false;
+
+  const int STACK_SIZE = 256;  
+  int stack[STACK_SIZE];
+  int stack_ptr = 0;
+  stack[stack_ptr++] = u_data.bvh_node_count - 1;
+ 
+  int n = 0;
+  while(stack_ptr > 0 && n < 2000){
+    stack_ptr--;
+    BVHNode bvh_node = bvh_list[stack[stack_ptr]];
+
+    if(bvh_node.count == 1){
+      HitInfo tmp;
+      if(hit_sphere(spheres[bvh_node.left], ray, tmp, t_min, info.t)){
+        hit_anything = true;
+        info = tmp;
+      }
+    } else {
+      if(hit_bounding_box(bvh_node.bbox, ray, t_min, info.t)){
+        if(bvh_node.left != -1){
+          stack[stack_ptr++] = bvh_node.left;
+        }
+        if(bvh_node.right != -1){
+          stack[stack_ptr++] = bvh_node.right;
+        }
+      } 
+    }
+    
+    n++;
+  }
+
+  return hit_anything;
+}
+
 float4 ray_color(Ray ray, float seed){
   float4 color = float4(1.0f, 1.0f, 1.0f, 1.0f);
 
   for(int bounces = 0; bounces < u_data.max_bounces; bounces++){
     HitInfo info;
-    info.t = u_data.t_max;
     bool hit_anything = false;
+    
+    if(u_data.use_bvh == 0){
+         info.t = u_data.t_max;
 
-    for(int i = 0; i < u_data.sphere_count; i++){
-      HitInfo tmp;
-      if(hit_sphere(spheres[i], ray, tmp, u_data.t_min, info.t)){
-        info = tmp;
-        hit_anything = true;
+         for(int i = 0; i < u_data.sphere_count; i++){
+         HitInfo tmp;
+         if(hit_sphere(spheres[i], ray, tmp, u_data.t_min, info.t)){
+         info = tmp;
+         hit_anything = true;
+         }
+         }
+    } else {
+      if(u_data.bvh_node_count > 0){
+        hit_anything = hit_bvh(ray, info, u_data.t_min, u_data.t_max);
       }
     }
 
